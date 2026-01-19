@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  server:
+    image: nginx
+    ports:
+      - "8080:80"
+
+  client:
+    image: curlimages/curl
+    command: sleep infinity

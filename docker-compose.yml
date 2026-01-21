@@ -3,6 +3,9 @@
 networks:
   testnet:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
 
 services:
   server:
@@ -38,8 +41,13 @@ services:
 
   sensor:
     image: nicolaka/netshoot
-    networks:
-      - testnet
-    command: sh -c "tcpdump -i eth0 -nn -s 0 -w /pcaps/capture.pcap"
+    network_mode: host
+    cap_add:
+    - NET_ADMIN
+    - NET_RAW
     volumes:
-      - ./pcaps:/pcaps
+    - ./pcaps:/pcaps
+    command: >
+      sh -c "tcpdump -i any -nn -s 0
+      net 172.30.0.0/16
+      -w /pcaps/capture.pcap"

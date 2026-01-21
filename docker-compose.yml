@@ -1,4 +1,4 @@
-version: "3.9"
+#version: "3.9"
 
 networks:
   testnet:
@@ -9,8 +9,8 @@ services:
     image: nginx
     networks:
       - testnet
-    ports:
-      - "8080:80"
+  #  ports:
+  #    - "8080:80"
 
   client1:
     image: curlimages/curl
@@ -30,3 +30,16 @@ services:
     networks:
       - testnet
       
+  attacker:
+    image: nicolaka/netshoot
+    command: sleep infinity
+    networks:
+      - testnet
+
+  sensor:
+    image: nicolaka/netshoot
+    networks:
+      - testnet
+    command: sh -c "tcpdump -i eth0 -nn -s 0 -w /pcaps/capture.pcap"
+    volumes:
+      - ./pcaps:/pcaps

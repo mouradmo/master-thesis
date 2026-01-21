@@ -1,11 +1,32 @@
 version: "3.9"
 
+networks:
+  testnet:
+    driver: bridge
+
 services:
   server:
     image: nginx
+    networks:
+      - testnet
     ports:
       - "8080:80"
 
-  client:
+  client1:
     image: curlimages/curl
     command: sleep infinity
+    networks:
+      - testnet
+
+  client2:
+    image: curlimages/curl
+    command: sleep infinity
+    networks:
+      - testnet
+
+  client3:
+    image: curlimages/curl
+    command: sleep infinity
+    networks:
+      - testnet
+      

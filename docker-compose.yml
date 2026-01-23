@@ -47,7 +47,6 @@ services:
 
   sensor:
     image: nicolaka/netshoot
-    # sensor: captures HTTP traffic to the server (ARP filtered)
     network_mode: host
     cap_add:
     - NET_ADMIN

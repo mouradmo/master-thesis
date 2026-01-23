@@ -3,6 +3,8 @@
 networks:
   testnet:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-testnet
     ipam:
       config:
         - subnet: 172.30.0.0/16
@@ -11,36 +13,41 @@ services:
   server:
     image: nginx
     networks:
-      - testnet
-  #  ports:
-  #    - "8080:80"
+      testnet:
+        ipv4_address: 172.30.0.10
+
 
   client1:
     image: curlimages/curl
     command: sleep infinity
     networks:
-      - testnet
+      testnet:
+        ipv4_address: 172.30.0.11
 
   client2:
     image: curlimages/curl
     command: sleep infinity
     networks:
-      - testnet
+      testnet:
+        ipv4_address: 172.30.0.12
 
   client3:
     image: curlimages/curl
     command: sleep infinity
     networks:
-      - testnet
+      testnet:
+        ipv4_address: 172.30.0.13
       
   attacker:
     image: nicolaka/netshoot
     command: sleep infinity
     networks:
-      - testnet
+      testnet:
+        ipv4_address: 172.30.0.100
 
   sensor:
     image: nicolaka/netshoot
+    # sensor: captures HTTP traffic to the server (ARP filtered)
     network_mode: host
     cap_add:
     - NET_ADMIN
@@ -48,6 +55,6 @@ services:
     volumes:
     - ./pcaps:/pcaps
     command: >
-      sh -c "tcpdump -i any -nn -s 0
-      net 172.30.0.0/16
-      -w /pcaps/capture.pcap"
+      sh -c "tcpdump -U -i br-testnet -nn -s 0
+      'host 172.30.0.10 and (tcp or udp or icmp) and not arp'
+      -w /pcaps/captures.pcap"

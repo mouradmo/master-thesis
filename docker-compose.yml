@@ -11,49 +11,55 @@ networks:
 
 services:
   server:
-    image: nginx
+    image: nginx:latest
+    container_name: master-thesis-server
     networks:
       testnet:
         ipv4_address: 172.30.0.10
 
 
   client1:
-    image: curlimages/curl
+    image: curlimages/curl:latest
+    container_name: master-thesis-client1
     command: sleep infinity
     networks:
       testnet:
         ipv4_address: 172.30.0.11
 
-  client2:
-    image: curlimages/curl
-    command: sleep infinity
-    networks:
-      testnet:
-        ipv4_address: 172.30.0.12
+  # client2:
+  #   image: curlimages/curl
+  #   command: sleep infinity
+  #   networks:
+  #     testnet:
+  #       ipv4_address: 172.30.0.12
 
-  client3:
-    image: curlimages/curl
-    command: sleep infinity
-    networks:
-      testnet:
-        ipv4_address: 172.30.0.13
+  # client3:
+  #   image: curlimages/curl
+  #   command: sleep infinity
+  #   networks:
+  #     testnet:
+  #       ipv4_address: 172.30.0.13
       
   attacker:
-    image: nicolaka/netshoot
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-attacker
     command: sleep infinity
     networks:
       testnet:
         ipv4_address: 172.30.0.100
 
-  sensor:
-    image: nicolaka/netshoot
-    network_mode: host
+  capture:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-capture
+    network_mode: "service:server"
+    depends_on:
+      - server
     cap_add:
     - NET_ADMIN
     - NET_RAW
     volumes:
     - ./pcaps:/pcaps
     command: >
-      sh -c "tcpdump -U -i br-testnet -nn -s 0
+      sh -c "tcpdump -U -i eth0 -nn -s 0
       'host 172.30.0.10 and (tcp or udp or icmp) and not arp'
-      -w /pcaps/captures.pcap"
+      -w /pcaps/server_capture.pcap"

@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix
 # Load labeled packets CSV
 df = pd.read_csv("labeled_packets.csv")
 
@@ -88,11 +91,64 @@ flows = (
 # Duration in seconds
 flows["duration_s"] = (flows["flow_end"] - flows["flow_start"]).dt.total_seconds()
 
-print("Flows shape:", flows.shape)
-print("\nLabel distribution (flows):")
-print(flows["label"].value_counts())
+# 1) Encode protocol as numeric
+protocol_map = {"tcp": 0, "udp": 1, "icmp": 2}
+flows["protocol_id"] = flows["protocol"].str.lower().map(protocol_map)
 
-print("\nPreview:")
-print(flows.head(10).to_string(index=False))
+# Safety check: ensure no unknown protocols slipped in
+unknown = flows["protocol_id"].isna().sum()
+print("\nUnknown protocols: ", unknown)
+if unknown > 0:
+    print("Unknown protocol values:", flows.loc[flows["protocol_id"].isna(), "protocol"].unique())
+
+# 2) Ensure ports are integers (should already be, but keep it safe)
+flows["src_port"] = flows["src_port"].fillna(-1).astype(int)
+flows["dst_port"] = flows["dst_port"].fillna(-1).astype(int)
+
+# 3) Save full flows table (for analysis/debugging/thesis tables)
+flows.to_csv("flows_full.csv", index=False)
+
+# 4) Select ML features (keep it simple + numeric)
+feature_cols = [
+    "duration_s",
+    "packets",
+    "mean_iat_s",
+    "std_iat_s",
+    "src_port",
+    "dst_port",
+    "protocol_id",
+]
+
+ml = flows[feature_cols + ["label"]].copy()
+
+# 5) Save ML dataset
+ml.to_csv("flows_ml.csv", index=False)
+
+# Load ML-ready flows
+ml = pd.read_csv("flows_ml.csv")
+
+X = ml.drop(columns=["label"])
+y = ml["label"]
+
+# Train / test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.3,
+    random_state=42,
+    stratify=y
+)
+
+# Baseline model
+clf = LogisticRegression(max_iter=1000)
+clf.fit(X_train, y_train)
+
+# Predictions
+y_pred = clf.predict(X_test)
+
+print("\nConfusion matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+print("\nClassification report:")
+print(classification_report(y_test, y_pred))
 
 

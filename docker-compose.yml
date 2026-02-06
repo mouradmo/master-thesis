@@ -41,7 +41,7 @@ services:
         # allow forwarding between inside and outside
         iptables -P FORWARD ACCEPT;
 
-        # NAT: make traffic from outside_net to inside_net appear as coming from GW (172.30.0.1)
+        # NAT: make traffic from outside_net to inside_net appear as coming from GW (172.30.0.254)
         iptables -t nat -A POSTROUTING -s 172.31.0.0/24 -d 172.30.0.0/24 -j MASQUERADE;
 
         # Allow established sessions
@@ -86,21 +86,24 @@ services:
     networks:
       inside_net:
         ipv4_address: 172.30.0.11
+    
+  client1_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-client1-route
+    network_mode: "service:client1"
+    depends_on:
+     - client1
+     - gw
+    cap_add:
+     - NET_ADMIN
+    command: >
+     sh -c "
+        ip route del default;
+        ip route add default via 172.30.0.254;
+        echo '[client1_route] default route set to 172.30.0.254';
+        sleep infinity
+      "
 
-  # client2:
-  #   image: curlimages/curl
-  #   command: sleep infinity
-  #   networks:
-  #     testnet:
-  #       ipv4_address: 172.30.0.12
-
-  # client3:
-  #   image: curlimages/curl
-  #   command: sleep infinity
-  #   networks:
-  #     testnet:
-  #       ipv4_address: 172.30.0.13
-      
   attacker:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-attacker
@@ -120,15 +123,15 @@ services:
   capture:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-capture
-    network_mode: "service:server"
+    network_mode: "service:gw"
     depends_on:
-      - server
+      - gw
     cap_add:
     - NET_ADMIN
     - NET_RAW
     volumes:
-    - ./pcaps:/pcaps
+    - ./:/data
     command: >
-      sh -c "tcpdump -U -i eth0 -nn -s 0
-      'host 172.30.0.10 and (tcp or udp or icmp) and not arp'
-      -w /pcaps/server_capture.pcap"
+      sh -c "tcpdump -U -i any -nn -s 0
+      '(net 172.30.0.0/24 and net 172.31.0.0/24)'
+      -w /data/gw.pcap"

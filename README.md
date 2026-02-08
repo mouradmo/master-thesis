@@ -78,7 +78,15 @@ Run the labeling script:
 
 ```bash
 python label_pcap.py \
-  --pcap pcaps/server_capture.pcap \
+  --pcap path_to_pcap \
   --ground-truth ground_truth.csv \
   --out labeled_packets.csv
+```
+
+
+Run generate-compose.py
+
+```bash
+python3 generate_compose.py --clients x --attackers y --pcap gateway.pcap
+
 ```

@@ -1,137 +1,120 @@
-#version: "3.9"
-
 networks:
-  inside_net:
+  a_server_net:
     driver: bridge
-    # driver_opts:
-    #   com.docker.network.bridge.name: br-inside
     ipam:
       config:
-        - subnet: 172.30.0.0/24
-
-  outside_net:
+      - subnet: 172.30.0.0/24
+  b_client_net:
     driver: bridge
-    # driver_opts:
-    #   com.docker.network.bridge.name: br-outside
     ipam:
       config:
-        - subnet: 172.31.0.0/24
-
-
+      - subnet: 172.31.0.0/24
+  c_outside_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.32.0.0/24
 services:
-
-  # Gateway
   gw:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-gw
     cap_add:
-      - NET_ADMIN
-      - NET_RAW
+    - NET_ADMIN
+    - NET_RAW
     sysctls:
-      net.ipv4.ip_forward: "1"
+      net.ipv4.ip_forward: '1'
     networks:
-      inside_net:
+      a_server_net:
         ipv4_address: 172.30.0.254
-      outside_net:
-         ipv4_address: 172.31.0.254
-    command: >
-      sh -c "
-        # Flush old rules 
-        iptables -F && iptables -t nat -F;
-        # allow forwarding between inside and outside
-        iptables -P FORWARD ACCEPT;
-
-        # NAT: make traffic from outside_net to inside_net appear as coming from GW (172.30.0.254)
-        iptables -t nat -A POSTROUTING -s 172.31.0.0/24 -d 172.30.0.0/24 -j MASQUERADE;
-
-        # Allow established sessions
-        iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT;
-
-        echo 'GW ready: routing + NAT enabled';
-        sleep infinity
-      "
-          
-
+      b_client_net:
+        ipv4_address: 172.31.0.254
+      c_outside_net:
+        ipv4_address: 172.32.0.254
+    command: 'sh -c "iptables -F && iptables -t nat -F; iptables -P FORWARD ACCEPT; iptables -A FORWARD -m conntrack --ctstate
+      ESTABLISHED,RELATED -j ACCEPT; echo ''GW ready: routing enabled (no NAT)''; sleep infinity"'
   server:
     image: nginx:latest
     container_name: master-thesis-server
     networks:
-      inside_net:
+      a_server_net:
         ipv4_address: 172.30.0.10
-
   server_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-server-route
-    network_mode: "service:server"
+    network_mode: service:server
     depends_on:
-      - server
-      - gw
+    - server
+    - gw
     cap_add:
-      - NET_ADMIN
-    command: >
-      sh -c "
-        # replace default route inside the server network namespace
-        ip route del default;
-        ip route add default via 172.30.0.254;
-        echo '[server_route] default route set to 172.30.0.254';
-        sleep infinity
-      "
-
-
-
-  client1:
-    image: curlimages/curl:latest
-    container_name: master-thesis-client1
-    command: sleep infinity
-    networks:
-      inside_net:
-        ipv4_address: 172.30.0.11
-    
-  client1_route:
-    image: nicolaka/netshoot:latest
-    container_name: master-thesis-client1-route
-    network_mode: "service:client1"
-    depends_on:
-     - client1
-     - gw
-    cap_add:
-     - NET_ADMIN
-    command: >
-     sh -c "
-        ip route del default;
-        ip route add default via 172.30.0.254;
-        echo '[client1_route] default route set to 172.30.0.254';
-        sleep infinity
-      "
-
-  attacker:
-    image: nicolaka/netshoot:latest
-    container_name: master-thesis-attacker
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    networks:
-      outside_net:
-        ipv4_address: 172.31.0.100
-    command: >
-      sh -c "
-        # Route traffic to inside_net via the gateway on outside_net
-        ip route add 172.30.0.0/24 via 172.31.0.254;
-        sleep infinity
-      "
-
+    - NET_ADMIN
+    command: sh -c "ip route del default; ip route add default via 172.30.0.254; echo '[server_route] default route set';
+      sleep infinity"
   capture:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-capture
-    network_mode: "service:gw"
+    network_mode: service:gw
     depends_on:
-      - gw
+    - gw
     cap_add:
     - NET_ADMIN
     - NET_RAW
     volumes:
     - ./:/data
-    command: >
-      sh -c "tcpdump -U -i any -nn -s 0
-      '(net 172.30.0.0/24 and net 172.31.0.0/24)'
-      -w /data/gw.pcap"
+    command: sh -c "tcpdump -U -i any -nn -s 0 '(net 172.31.0.0/24 or net 172.32.0.0/24 or net 172.30.0.0/24) and not arp'
+      -w /data/gateway.pcap"
+  client1:
+    image: curlimages/curl:latest
+    container_name: master-thesis-client1
+    command: sleep infinity
+    networks:
+      b_client_net:
+        ipv4_address: 172.31.0.11
+  client1_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-client1-route
+    network_mode: service:client1
+    depends_on:
+    - client1
+    - gw
+    cap_add:
+    - NET_ADMIN
+    command: sh -c "ip route del default; ip route add default via 172.31.0.254; ip route add 172.30.0.0/24 via 172.31.0.254
+      2>/dev/null || true; echo '[client1_route] routes set'; sleep infinity"
+  client2:
+    image: curlimages/curl:latest
+    container_name: master-thesis-client2
+    command: sleep infinity
+    networks:
+      b_client_net:
+        ipv4_address: 172.31.0.12
+  client2_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-client2-route
+    network_mode: service:client2
+    depends_on:
+    - client2
+    - gw
+    cap_add:
+    - NET_ADMIN
+    command: sh -c "ip route del default; ip route add default via 172.31.0.254; ip route add 172.30.0.0/24 via 172.31.0.254
+      2>/dev/null || true; echo '[client2_route] routes set'; sleep infinity"
+  attacker1:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-attacker1
+    cap_add:
+    - NET_ADMIN
+    - NET_RAW
+    networks:
+      c_outside_net:
+        ipv4_address: 172.32.0.100
+    command: sh -c "ip route add 172.31.0.0/24 via 172.32.0.254; ip route add 172.30.0.0/24 via 172.32.0.254; sleep infinity"
+  attacker2:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-attacker2
+    cap_add:
+    - NET_ADMIN
+    - NET_RAW
+    networks:
+      c_outside_net:
+        ipv4_address: 172.32.0.101
+    command: sh -c "ip route add 172.31.0.0/24 via 172.32.0.254; ip route add 172.30.0.0/24 via 172.32.0.254; sleep infinity"

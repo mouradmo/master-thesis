@@ -114,8 +114,8 @@ def make_compose(num_clients: int, num_attackers: int, pcap_filename: str) -> Di
         "volumes": ["./:/data"],
         "command": (
             "sh -c \""
-            "tcpdump -U -i any -nn -s 0 "
-            f"'(net {CLIENT_SUBNET} or net {OUTSIDE_SUBNET} or net {SERVER_SUBNET}) and not arp' "
+            "tcpdump -U -i any -Q in -nn -s 0 "
+            f"'(net {SERVER_SUBNET} or net {CLIENT_SUBNET} or net {OUTSIDE_SUBNET}) and not arp' "
             f"-w /data/{pcap_filename}"
             "\""
         ),

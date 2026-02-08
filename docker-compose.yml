@@ -60,8 +60,8 @@ services:
     - NET_RAW
     volumes:
     - ./:/data
-    command: sh -c "tcpdump -U -i any -nn -s 0 '(net 172.31.0.0/24 or net 172.32.0.0/24 or net 172.30.0.0/24) and not arp'
-      -w /data/gateway.pcap"
+    command: sh -c "tcpdump -U -i any -Q in -nn -s 0 '(net 172.30.0.0/24 or net 172.31.0.0/24 or net 172.32.0.0/24) and not
+      arp' -w /data/gateway.pcap"
   client1:
     image: curlimages/curl:latest
     container_name: master-thesis-client1

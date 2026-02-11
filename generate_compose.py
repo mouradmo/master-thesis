@@ -11,6 +11,10 @@
         host_1 -> 172.31.11.0/24 (host IP 172.31.11.11)
         host_2 -> 172.31.12.0/24 (host IP 172.31.12.12)
         ... MAX 200 hosts
+. Zone C
+.  
+.
+
 - Single gateway (gw) attaches to ALL subnets and routes between them (no NAT)
 - Capture runs at the gateway and includes ALL subnets
 """
@@ -25,25 +29,37 @@ import yaml
 
 ZONE_A_OCTET2 = 30
 ZONE_B_OCTET2 = 31
+ZONE_C_OCTET2 = 32
+ZONE_D_OCTET2 = 33
 
 A_SERVER_OCTET3 = 10
-A_CLIENTS_OCTET3_START = 11  # client_1 -> 11, client_2 -> 12, ...
+A_INTERNAL_OCTET3_START = 11  # internal_host_01 -> 11, internal_host_02 -> 12, ...
 
-B_HOSTS_OCTET3_START = 11    # host_1 -> 11, host_2 -> 12, ...
+B_EXTERNAL_OCTET3_START = 11  # external_host_01 -> 11, external_host_02 -> 12, ...
+C_EXTERNAL_OCTET3_START = 11
+D_EXTERNAL_OCTET3_START = 11
 
 GW_HOST_OCTET4 = 254
 
 
 def net_name_a_server() -> str:
-    return "A_zone_server_net"
+    return "A_server_net"
 
 
-def net_name_a_client(i: int) -> str:
-    return f"A_zone_client_{i}_net"
+def net_name_a_internal(i: int) -> str:
+    return f"A_internal_host_{i:02d}_net"
 
 
-def net_name_b_host(i: int) -> str:
-    return f"B_zone_host_{i}_net"
+def net_name_b_external(i: int) -> str:
+    return f"B_external_host_{i:02d}_net"
+
+
+def net_name_c_external(i: int) -> str:
+    return f"C_external_host_{i:02d}_net"
+
+
+def net_name_d_external(i: int) -> str:
+    return f"D_external_host_{i:02d}_net"
 
 
 def subnet(octet2: int, octet3: int) -> str:
@@ -70,15 +86,22 @@ def validate_octet3_range(start: int, count: int, label: str) -> None:
 
 
 def make_compose(
-    num_a_clients: int,
-    num_b_hosts: int,
-    a_clients_octet3_start: int,
-    b_hosts_octet3_start: int,
+    num_a_internal_hosts: int,
+    num_b_external_hosts: int,
+    num_c_external_hosts: int,
+    num_d_external_hosts: int,
+    a_internal_octet3_start: int,
+    b_external_octet3_start: int,
+    c_external_octet3_start: int,
+    d_external_octet3_start: int,
     pcap_filename: str,
+
 ) -> Dict[str, Any]:
 
-    validate_octet3_range(a_clients_octet3_start, num_a_clients, "A-zone clients")
-    validate_octet3_range(b_hosts_octet3_start, num_b_hosts, "B-zone hosts")
+    validate_octet3_range(a_internal_octet3_start, num_a_internal_hosts, "A-zone internal hosts")
+    validate_octet3_range(b_external_octet3_start, num_b_external_hosts, "B-zone external hosts")
+    validate_octet3_range(c_external_octet3_start, num_c_external_hosts, "C-zone external hosts")
+    validate_octet3_range(d_external_octet3_start, num_d_external_hosts, "D-zone external hosts")
 
     compose: Dict[str, Any] = {
         "networks": {},
@@ -94,36 +117,59 @@ def make_compose(
         "ipam": {"config": [{"subnet": subnet(ZONE_A_OCTET2, A_SERVER_OCTET3)}]},
     }
 
-    # --- Networks: Zone A clients (one /24 per client)
-    a_client_octets: List[int] = []
-    for i in range(1, num_a_clients + 1):
-        octet3 = a_clients_octet3_start + (i - 1)
-        a_client_octets.append(octet3)
-        networks[net_name_a_client(i)] = {
+    # --- Networks: Zone A internal hosts (one /24 per host)
+    a_internal_octets: List[int] = []
+    for i in range(1, num_a_internal_hosts + 1):
+        octet3 = a_internal_octet3_start + (i - 1)
+        a_internal_octets.append(octet3)
+        networks[net_name_a_internal(i)] = {
             "driver": "bridge",
             "ipam": {"config": [{"subnet": subnet(ZONE_A_OCTET2, octet3)}]},
         }
 
-    # --- Networks: Zone B hosts (one /24 per host)
-    b_host_octets: List[int] = []
-    for i in range(1, num_b_hosts + 1):
-        octet3 = b_hosts_octet3_start + (i - 1)
-        b_host_octets.append(octet3)
-        networks[net_name_b_host(i)] = {
+    # --- Networks: Zone B external hosts (one /24 per host)
+    b_external_octets: List[int] = []
+    for i in range(1, num_b_external_hosts + 1):
+        octet3 = b_external_octet3_start + (i - 1)
+        b_external_octets.append(octet3)
+        networks[net_name_b_external(i)] = {
             "driver": "bridge",
             "ipam": {"config": [{"subnet": subnet(ZONE_B_OCTET2, octet3)}]},
         }
-
+    # --- Networks: Zone C external hosts (one /24 per host)
+    c_external_octets: List[int] = []
+    for i in range(1, num_c_external_hosts + 1):
+        octet3 = c_external_octet3_start + (i - 1)
+        c_external_octets.append(octet3)
+        networks[net_name_c_external(i)] = {
+            "driver": "bridge",
+            "ipam": {"config": [{"subnet": subnet(ZONE_C_OCTET2, octet3)}]},
+        }
+    # --- Networks: Zone D external hosts (one /24 per host)
+        d_external_octets: List[int] = []
+    for i in range(1, num_d_external_hosts + 1):
+        octet3 = d_external_octet3_start + (i - 1)
+        d_external_octets.append(octet3)
+        networks[net_name_d_external(i)] = {
+            "driver": "bridge",
+            "ipam": {"config": [{"subnet": subnet(ZONE_D_OCTET2, octet3)}]},
+        }
     # --- Gateway (connects to all subnets)
     gw_networks: Dict[str, Any] = {
         net_name_a_server(): {"ipv4_address": gw_ip(ZONE_A_OCTET2, A_SERVER_OCTET3)}
     }
 
-    for i, octet3 in enumerate(a_client_octets, start=1):
-        gw_networks[net_name_a_client(i)] = {"ipv4_address": gw_ip(ZONE_A_OCTET2, octet3)}
+    for i, octet3 in enumerate(a_internal_octets, start=1):
+        gw_networks[net_name_a_internal(i)] = {"ipv4_address": gw_ip(ZONE_A_OCTET2, octet3)}
 
-    for i, octet3 in enumerate(b_host_octets, start=1):
-        gw_networks[net_name_b_host(i)] = {"ipv4_address": gw_ip(ZONE_B_OCTET2, octet3)}
+    for i, octet3 in enumerate(b_external_octets, start=1):
+        gw_networks[net_name_b_external(i)] = {"ipv4_address": gw_ip(ZONE_B_OCTET2, octet3)}
+
+    for i, octet3 in enumerate(c_external_octets, start=1):
+        gw_networks[net_name_c_external(i)] = {"ipv4_address": gw_ip(ZONE_C_OCTET2, octet3)}
+
+    for i, octet3 in enumerate(d_external_octets, start=1):
+        gw_networks[net_name_d_external(i)] = {"ipv4_address": gw_ip(ZONE_D_OCTET2, octet3)}
 
     services["gw"] = {
         "image": "nicolaka/netshoot:latest",
@@ -141,7 +187,6 @@ def make_compose(
             "\""
         ),
     }
-
     # --- Server (alone in 172.30.10.0/24)
     server_ip = "172.30.10.10"
     server_gw = gw_ip(ZONE_A_OCTET2, A_SERVER_OCTET3)
@@ -168,70 +213,82 @@ def make_compose(
         ),
     }
 
-    # --- Zone A clients, one client per /24
-    for i, octet3 in enumerate(a_client_octets, start=1):
-        client_name = f"A_zone_client_{i}"
-        client_net = net_name_a_client(i)
-        client_ip = host_ip_pattern(ZONE_A_OCTET2, octet3)
-        client_gw = gw_ip(ZONE_A_OCTET2, octet3)
+    # --- Zone A internal hosts
+    for i, octet3 in enumerate(a_internal_octets, start=1):
+        name = f"A_internal_host_{i:02d}"
+        net = net_name_a_internal(i)
+        ip_addr = host_ip_pattern(ZONE_A_OCTET2, octet3)
+        gw_addr = gw_ip(ZONE_A_OCTET2, octet3)
 
-        services[client_name] = {
+        services[name] = {
             "image": "curlimages/curl:latest",
-            "container_name": f"master-thesis-{client_name}",
+            "container_name": f"master-thesis-{name}",
             "command": "sleep infinity",
-            "networks": {client_net: {"ipv4_address": client_ip}},
+            "networks": {net: {"ipv4_address": ip_addr}},
         }
 
-        services[f"{client_name}_route"] = {
+        services[f"{name}_route"] = {
             "image": "nicolaka/netshoot:latest",
-            "container_name": f"master-thesis-{client_name}-route",
-            "network_mode": f"service:{client_name}",
-            "depends_on": [client_name, "gw"],
+            "container_name": f"master-thesis-{name}-route",
+            "network_mode": f"service:{name}",
+            "depends_on": [name, "gw"],
             "cap_add": ["NET_ADMIN"],
             "command": (
                 "sh -c \""
                 "ip route del default 2>/dev/null || true; "
-                f"ip route add default via {client_gw}; "
+                f"ip route add default via {gw_addr}; "
                 "sleep infinity"
                 "\""
             ),
         }
 
-    # --- Zone B hosts, one host per /24
-    for i, octet3 in enumerate(b_host_octets, start=1):
-        host_name = f"B_zone_host_{i}"
-        host_net = net_name_b_host(i)
-        host_ip = host_ip_pattern(ZONE_B_OCTET2, octet3)
-        host_gw = gw_ip(ZONE_B_OCTET2, octet3)
+    # --- Helper for external zones (B/C/D)
+    def add_external_zone(
+        zone_letter: str,
+        octet2: int,
+        host_octets: List[int],
+        net_name_fn,
+    ) -> None:
+        for i, octet3 in enumerate(host_octets, start=1):
+            name = f"{zone_letter}_external_host_{i:02d}"
+            net = net_name_fn(i)
+            ip_addr = host_ip_pattern(octet2, octet3)
+            gw_addr = gw_ip(octet2, octet3)
 
-        services[host_name] = {
-            "image": "nicolaka/netshoot:latest",
-            "container_name": f"master-thesis-{host_name}",
-            "cap_add": ["NET_ADMIN", "NET_RAW"],
-            "networks": {host_net: {"ipv4_address": host_ip}},
-            "command": "sleep infinity",
-        }
+            services[name] = {
+                "image": "nicolaka/netshoot:latest",
+                "container_name": f"master-thesis-{name}",
+                "cap_add": ["NET_ADMIN", "NET_RAW"],
+                "networks": {net: {"ipv4_address": ip_addr}},
+                "command": "sleep infinity",
+            }
 
-        services[f"{host_name}_route"] = {
-            "image": "nicolaka/netshoot:latest",
-            "container_name": f"master-thesis-{host_name}-route",
-            "network_mode": f"service:{host_name}",
-            "depends_on": [host_name, "gw"],
-            "cap_add": ["NET_ADMIN"],
-            "command": (
-                "sh -c \""
-                "ip route del default 2>/dev/null || true; "
-                f"ip route add default via {host_gw}; "
-                "sleep infinity"
-                "\""
-            ),
-        }
+            services[f"{name}_route"] = {
+                "image": "nicolaka/netshoot:latest",
+                "container_name": f"master-thesis-{name}-route",
+                "network_mode": f"service:{name}",
+                "depends_on": [name, "gw"],
+                "cap_add": ["NET_ADMIN"],
+                "command": (
+                    "sh -c \""
+                    "ip route del default 2>/dev/null || true; "
+                    f"ip route add default via {gw_addr}; "
+                    "sleep infinity"
+                    "\""
+                ),
+            }
+
+    add_external_zone("B", ZONE_B_OCTET2, b_external_octets, net_name_b_external)
+    add_external_zone("C", ZONE_C_OCTET2, c_external_octets, net_name_c_external)
+    add_external_zone("D", ZONE_D_OCTET2, d_external_octets, net_name_d_external)
 
     # --- Capture at gateway: include all subnets
     all_subnets: List[str] = [
         subnet(ZONE_A_OCTET2, A_SERVER_OCTET3),
-        *[subnet(ZONE_A_OCTET2, o3) for o3 in a_client_octets],
-        *[subnet(ZONE_B_OCTET2, o3) for o3 in b_host_octets],
+        *[subnet(ZONE_A_OCTET2, o3) for o3 in a_internal_octets],
+        *[subnet(ZONE_B_OCTET2, o3) for o3 in b_external_octets],
+        *[subnet(ZONE_C_OCTET2, o3) for o3 in c_external_octets],
+        *[subnet(ZONE_D_OCTET2, o3) for o3 in d_external_octets],
     ]
 
     net_filter = " or ".join([f"net {s}" for s in all_subnets]) if all_subnets else "ip"
@@ -256,19 +313,31 @@ def make_compose(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--a-clients", type=int, default=1, help="Number of Zone-A clients (one /24 per client)")
-    ap.add_argument("--b-hosts", type=int, default=1, help="Number of Zone-B hosts (one /24 per host)")
-    ap.add_argument("--a-clients-octet3-start", type=int, default=A_CLIENTS_OCTET3_START)
-    ap.add_argument("--b-hosts-octet3-start", type=int, default=B_HOSTS_OCTET3_START)
+
+    ap.add_argument("--a-internal-hosts", type=int, default=1, help="Zone-A internal hosts (one /24 per host)")
+
+    ap.add_argument("--b-external-hosts", type=int, default=1, help="Zone-B external hosts (one /24 per host)")
+    ap.add_argument("--c-external-hosts", type=int, default=0, help="Zone-C external hosts (one /24 per host)")
+    ap.add_argument("--d-external-hosts", type=int, default=0, help="Zone-D external hosts (one /24 per host)")
+
+    ap.add_argument("--a-internal-octet3-start", type=int, default=A_INTERNAL_OCTET3_START)
+    ap.add_argument("--b-external-octet3-start", type=int, default=B_EXTERNAL_OCTET3_START)
+    ap.add_argument("--c-external-octet3-start", type=int, default=C_EXTERNAL_OCTET3_START)
+    ap.add_argument("--d-external-octet3-start", type=int, default=D_EXTERNAL_OCTET3_START)
+
     ap.add_argument("--pcap", default="gateway.pcap")
     ap.add_argument("--out", default="docker-compose.yml")
     args = ap.parse_args()
 
     compose = make_compose(
-        num_a_clients=args.a_clients,
-        num_b_hosts=args.b_hosts,
-        a_clients_octet3_start=args.a_clients_octet3_start,
-        b_hosts_octet3_start=args.b_hosts_octet3_start,
+        num_a_internal_hosts=args.a_internal_hosts,
+        num_b_external_hosts=args.b_external_hosts,
+        num_c_external_hosts=args.c_external_hosts,
+        num_d_external_hosts=args.d_external_hosts,
+        a_internal_octet3_start=args.a_internal_octet3_start,
+        b_external_octet3_start=args.b_external_octet3_start,
+        c_external_octet3_start=args.c_external_octet3_start,
+        d_external_octet3_start=args.d_external_octet3_start,
         pcap_filename=args.pcap,
     )
 

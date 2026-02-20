@@ -52,7 +52,7 @@ def gw_ip(o2: int, o3: int) -> str:
 
 
 def host_ip_pattern(o2: int, o3: int) -> str:
-    # matches your pattern: 172.<o2>.<o3>.<o3>
+    # matches: 172.<o2>.<o3>.<o3>
     return f"172.{o2}.{o3}.{o3}"
 
 

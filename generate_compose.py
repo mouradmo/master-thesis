@@ -139,10 +139,34 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
     server_gw = gw_ip(a_o2, A_SERVER_OCTET3)
 
     services["server"] = {
-        "image": "nginx:latest",
+        "image": "nginx:alpine",
         "container_name": "master-thesis-server",
         "networks": {net_name_a_server(): {"ipv4_address": server_ip}},
+        "command": (
+             "sh -c \""
+             "apk add --no-cache openssl >/dev/null; "
+             "mkdir -p /etc/nginx/certs; "
+             "openssl req -x509 -nodes -newkey rsa:2048 -days 365 "
+              "-subj '/CN=server' "
+              "-keyout /etc/nginx/certs/key.pem "
+              "-out /etc/nginx/certs/cert.pem >/dev/null 2>&1; "
+             "cat > /etc/nginx/conf.d/default.conf <<'EOF'\n"
+             "server {\n"
+             "  listen 80;\n"
+             "  location / { return 200 'ok\\n'; }\n"
+             "}\n"
+              "server {\n"
+             "  listen 443 ssl;\n"
+             "  ssl_certificate     /etc/nginx/certs/cert.pem;\n"
+             "  ssl_certificate_key /etc/nginx/certs/key.pem;\n"
+             "  location / { return 200 'ok\\n'; }\n"
+             "}\n"
+             "EOF\n"
+             "nginx -g 'daemon off;'\n"
+             "\""
+        ),
     }
+    
 
     services["server_route"] = {
         "image": "nicolaka/netshoot:latest",
@@ -177,6 +201,11 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                     "image": "curlimages/curl:latest",
                     "container_name": f"master-thesis-{name}",
                     "command": "sleep infinity",
+                    "extra_hosts": [
+                        f"api.ipify.org:{server_ip}",
+                        f"ipify.org:{server_ip}",
+                        f"github.com:{server_ip}",
+                ],
                     "networks": {net: {"ipv4_address": ip_addr}},
                 }
 
@@ -206,9 +235,14 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                 services[name] = {
                     "image": "nicolaka/netshoot:latest",
                     "container_name": f"master-thesis-{name}",
+                    "command": "sleep infinity",
+                    "extra_hosts": [
+                        f"api.ipify.org:{server_ip}",
+                        f"ipify.org:{server_ip}",
+                        f"github.com:{server_ip}",
+                    ],
                     "cap_add": ["NET_ADMIN", "NET_RAW"],
                     "networks": {net: {"ipv4_address": ip_addr}},
-                    "command": "sleep infinity",
                 }
 
                 services[f"{name}_route"] = {

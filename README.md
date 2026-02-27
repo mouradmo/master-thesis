@@ -42,26 +42,16 @@ docker compose version
 docker compose up -d
 
 # Stop all services
-docker compose down
+docker compose down -v --remove-orphans
 ```
 
-## Enter Attacker Container
+## Enter container
 
 ```bash
-docker exec -it master-thesis-attacker bash
+docker exec -it master-thesis-container sh
 ```
 
-## Example Attacks
 
-From the attacker container, run attacks against the server:
-
-```bash
-# ICMP ping attack
-ping -c 5 server
-
-# Port scanning attack
-nmap -p 1-1000 server
-```
 
 ## Label PCAP Packets
 
@@ -83,10 +73,31 @@ python label_pcap.py \
   --out labeled_packets.csv
 ```
 
-
+Run csv_to_flow
+```bash
+csv-to-flow.py input_csv  output_flow
+``` 
 Run generate-compose.py
 
 ```bash
-python3 generate_compose.py --clients x --attackers y --pcap gateway.pcap
+python3 generate_compose.py --zones x --hosts-per-zone y,z --pcap gateway.pcap
 
+```
+
+Run set_delay.sh
+
+```bash
+chmod +x set_delay.sh
+./set_delay.sh set <src_ip> <dst_ip> <delay_ms>
+
+./set_delay.sh del <src_ip> <dst_ip>
+
+./set_delay.sh list
+
+```
+Run run_malware.sh
+
+```bash
+chmod +x run_malware.sh
+./run_malware.sh <container_name> <binary_path>
 ```

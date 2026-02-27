@@ -80,7 +80,9 @@ apply_delay() {
 
   dev="$(egress_dev "$dst")"
   [ -n "$dev" ] || { echo "ERROR: cannot find egress interface for dst=$dst" >&2; exit 1; }
-
+  # Check if source and destination are reachable
+  ping -c 1 -W 1 "$src" > /dev/null 2>&1 || { echo "ERROR: source $src not reachable" >&2; exit 1; }
+  ping -c 1 -W 1 "$dst" > /dev/null 2>&1 || { echo "ERROR: destination $dst not reachable" >&2; return 1; }
   mark="$(mark_dir "$src" "$dst")"
   classid="1:${mark}"
   handle="${mark}:"
@@ -101,8 +103,8 @@ apply_delay() {
   tc qdisc add dev "$dev" parent "$classid" handle "$handle" netem delay "${delay}ms"
 
   # 5) filter mark -> class (idempotent)
-  tc filter show dev "$dev" parent 1: 2>/dev/null | grep -q "handle $mark.*fw" \
-    || tc filter add dev "$dev" parent 1: protocol ip prio 1 handle "$mark" fw flowid "$classid"
+  tc filter del dev "$dev" parent 1: protocol ip prio 1 handle "$mark" fw 2>/dev/null || true
+  tc filter add dev "$dev" parent 1: protocol ip prio 1 handle "$mark" fw flowid "$classid"
 
   echo "OK: $src -> $dst delay=${delay}ms (egress=$dev mark=$mark)"
 }
@@ -113,7 +115,9 @@ remove_delay() {
 
   dev="$(egress_dev "$dst")"
   [ -n "$dev" ] || { echo "ERROR: cannot find egress interface for dst=$dst" >&2; exit 1; }
-
+  # Check if source and destination are reachable
+  ping -c 1 -W 1 "$src" > /dev/null 2>&1 || { echo "ERROR: source $src not reachable" >&2; exit 1; }
+  ping -c 1 -W 1 "$dst" > /dev/null 2>&1 || { echo "ERROR: destination $dst not reachable" >&2; exit 1; }
   mark="$(mark_dir "$src" "$dst")"
   classid="1:${mark}"
   handle="${mark}:"

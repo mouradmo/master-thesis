@@ -69,8 +69,8 @@ ensure_root_htb() {
   if ! tc qdisc show dev "$dev" | grep -q "htb 1:"; then
     # If something else is root, remove it (safe for this lab)
     tc qdisc del dev "$dev" root 2>/dev/null || true
-    tc qdisc add dev "$dev" root handle 1: htb default 1 r2q 1000
-    tc class add dev "$dev" parent 1: classid 1:1 htb rate 1000mbit ceil 1000mbit r2q 1000
+    tc qdisc add dev "$dev" root handle 1: htb default 1
+    tc class add dev "$dev" parent 1: classid 1:1 htb rate 1000mbit ceil 1000mbit quantum 125000
   fi
 }
 
@@ -94,14 +94,11 @@ apply_delay() {
 
   # 3) class per mark (idempotent)
   tc class show dev "$dev" 2>/dev/null | grep -q "class htb $classid" \
-    || tc class add dev "$dev" parent 1: classid "$classid" htb rate 1000mbit ceil 1000mbit
+    || tc class add dev "$dev" parent 1: classid "$classid" htb rate 1000mbit ceil 1000mbit quantum 125000
 
   # 4) netem per mark (idempotent/update)
-  if tc qdisc show dev "$dev" | grep -q "handle $handle netem"; then
-    tc qdisc change dev "$dev" parent "$classid" handle "$handle" netem delay "${delay}ms"
-  else
-    tc qdisc add dev "$dev" parent "$classid" handle "$handle" netem delay "${delay}ms"
-  fi
+  tc qdisc del dev "$dev" parent "$classid" handle "$handle" 2>/dev/null || true
+  tc qdisc add dev "$dev" parent "$classid" handle "$handle" netem delay "${delay}ms"
 
   # 5) filter mark -> class (idempotent)
   tc filter show dev "$dev" parent 1: 2>/dev/null | grep -q "handle $mark.*fw" \

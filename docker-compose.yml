@@ -1,39 +1,3 @@
-networks:
-  A_server_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.30.10.0/24
-  A_internal_host_01_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.30.11.0/24
-  A_internal_host_02_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.30.12.0/24
-  B_external_host_01_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.31.11.0/24
-  B_external_host_02_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.31.12.0/24
-  C_external_host_01_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.32.11.0/24
-  C_external_host_02_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.32.12.0/24
 services:
   gw:
     image: nicolaka/netshoot:latest
@@ -66,11 +30,8 @@ services:
     networks:
       A_server_net:
         ipv4_address: 172.30.10.10
-    command: "sh -c \"apk add --no-cache openssl >/dev/null; mkdir -p /etc/nginx/certs; openssl req -x509 -nodes -newkey rsa:2048\
-      \ -days 365 -subj '/CN=server' -keyout /etc/nginx/certs/key.pem -out /etc/nginx/certs/cert.pem >/dev/null 2>&1; cat\
-      \ > /etc/nginx/conf.d/default.conf <<'EOF'\nserver {\n  listen 80;\n  location / { return 200 'ok\\n'; }\n}\nserver\
-      \ {\n  listen 443 ssl;\n  ssl_certificate     /etc/nginx/certs/cert.pem;\n  ssl_certificate_key /etc/nginx/certs/key.pem;\n\
-      \  location / { return 200 'ok\\n'; }\n}\nEOF\nnginx -g 'daemon off;'\n\""
+    command: "sh -c \"cat > /etc/nginx/conf.d/default.conf <<'EOF'\nserver {\n  listen 80;\n  location / { return 200 'ok\\\
+      n'; }\n}\nEOF\nnginx -g 'daemon off;'\n\""
   server_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-server-route
@@ -124,7 +85,7 @@ services:
     - NET_ADMIN
     command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.30.12.254; sleep infinity"
   B_external_host_01:
-    image: nicolaka/netshoot:latest
+    image: thesis-wine-host:latest
     container_name: master-thesis-B_external_host_01
     command: sleep infinity
     extra_hosts:
@@ -137,6 +98,8 @@ services:
     networks:
       B_external_host_01_net:
         ipv4_address: 172.31.11.11
+    environment:
+    - WINEDEBUG=-all
   B_external_host_01_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-B_external_host_01-route
@@ -148,7 +111,7 @@ services:
     - NET_ADMIN
     command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.31.11.254; sleep infinity"
   B_external_host_02:
-    image: nicolaka/netshoot:latest
+    image: thesis-wine-host:latest
     container_name: master-thesis-B_external_host_02
     command: sleep infinity
     extra_hosts:
@@ -161,6 +124,8 @@ services:
     networks:
       B_external_host_02_net:
         ipv4_address: 172.31.12.12
+    environment:
+    - WINEDEBUG=-all
   B_external_host_02_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-B_external_host_02-route
@@ -172,7 +137,7 @@ services:
     - NET_ADMIN
     command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.31.12.254; sleep infinity"
   C_external_host_01:
-    image: nicolaka/netshoot:latest
+    image: thesis-wine-host:latest
     container_name: master-thesis-C_external_host_01
     command: sleep infinity
     extra_hosts:
@@ -185,6 +150,8 @@ services:
     networks:
       C_external_host_01_net:
         ipv4_address: 172.32.11.11
+    environment:
+    - WINEDEBUG=-all
   C_external_host_01_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-C_external_host_01-route
@@ -196,7 +163,7 @@ services:
     - NET_ADMIN
     command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.32.11.254; sleep infinity"
   C_external_host_02:
-    image: nicolaka/netshoot:latest
+    image: thesis-wine-host:latest
     container_name: master-thesis-C_external_host_02
     command: sleep infinity
     extra_hosts:
@@ -209,6 +176,8 @@ services:
     networks:
       C_external_host_02_net:
         ipv4_address: 172.32.12.12
+    environment:
+    - WINEDEBUG=-all
   C_external_host_02_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-C_external_host_02-route
@@ -232,3 +201,39 @@ services:
     - ./:/data
     command: sh -c "tcpdump -U -i any -nn -s 0 '(net 172.30.10.0/24 or net 172.30.11.0/24 or net 172.30.12.0/24 or net 172.31.11.0/24
       or net 172.31.12.0/24 or net 172.32.11.0/24 or net 172.32.12.0/24) and not arp' -w /data/gateway.pcap"
+networks:
+  A_server_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.10.0/24
+  A_internal_host_01_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.11.0/24
+  A_internal_host_02_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.12.0/24
+  B_external_host_01_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.31.11.0/24
+  B_external_host_02_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.31.12.0/24
+  C_external_host_01_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.32.11.0/24
+  C_external_host_02_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.32.12.0/24

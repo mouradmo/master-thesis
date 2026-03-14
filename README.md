@@ -101,3 +101,11 @@ Run run_malware.sh
 chmod +x run_malware.sh
 ./run_malware.sh <container_name> <binary_path>
 ```
+```bash
+zeek -b -C -r gateway.pcap base/protocols/conn LogAscii::use_json=T
+```
+
+Running Zeek label file
+```bash
+python3 label_zeek.py ground_truth.csv conn.log labeled_conn.csv
+```

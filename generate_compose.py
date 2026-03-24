@@ -5,6 +5,7 @@ import argparse
 import string
 from pathlib import Path
 from typing import Any, Dict, List
+import json
 
 import yaml
 
@@ -14,8 +15,8 @@ A_OCTET2_BASE = 30
 A_SERVER_OCTET3 = 10
 HOST_OCTET3_START = 11  # host_01 -> 11 (=> .11.11), host_02 -> 12, ...
 
-# Prebuilt Wine image for external hosts
-WINE_IMAGE_NAME = "thesis-wine-host:latest"
+# Linux image for external hosts
+EXTERNAL_IMAGE_NAME = "nicolaka/netshoot:latest"
 
 
 def zone_letters(n: int) -> List[str]:
@@ -37,6 +38,7 @@ def parse_hosts_per_zone(s: str, zones: int) -> List[int]:
     if any(c > 200 for c in counts):
         raise ValueError("host counts must be <= 200")
 
+    # also ensure we won't exceed octet3 253
     for zi, c in enumerate(counts):
         if c == 0:
             continue
@@ -60,6 +62,7 @@ def gw_ip(o2: int, o3: int) -> str:
 
 
 def host_ip_pattern(o2: int, o3: int) -> str:
+    # matches: 172.<o2>.<o3>.<o3>
     return f"172.{o2}.{o3}.{o3}"
 
 
@@ -82,6 +85,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
     services: Dict[str, Any] = compose["services"]
     networks: Dict[str, Any] = compose["networks"]
 
+    # --- Build networks + gw attachments
     gw_networks: Dict[str, Any] = {}
     all_subnets: List[str] = []
 
@@ -90,6 +94,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
         host_count = hosts_per_zone[zi]
 
         if z == "A":
+            # Server subnet (only in A)
             networks[net_name_a_server()] = {
                 "driver": "bridge",
                 "ipam": {"config": [{"subnet": subnet(o2, A_SERVER_OCTET3)}]},
@@ -97,6 +102,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
             gw_networks[net_name_a_server()] = {"ipv4_address": gw_ip(o2, A_SERVER_OCTET3)}
             all_subnets.append(subnet(o2, A_SERVER_OCTET3))
 
+            # Internal hosts: start at 11 (=> .11.11)
             for i in range(1, host_count + 1):
                 o3 = HOST_OCTET3_START + (i - 1)
                 net = net_name_a_internal(i)
@@ -107,6 +113,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                 gw_networks[net] = {"ipv4_address": gw_ip(o2, o3)}
                 all_subnets.append(subnet(o2, o3))
         else:
+            # External zones: NO server subnet, hosts start at 11 (=> .11.11)
             for i in range(1, host_count + 1):
                 o3 = HOST_OCTET3_START + (i - 1)
                 net = net_name_external(z, i)
@@ -117,6 +124,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                 gw_networks[net] = {"ipv4_address": gw_ip(o2, o3)}
                 all_subnets.append(subnet(o2, o3))
 
+    # --- Gateway
     services["gw"] = {
         "image": "nicolaka/netshoot:latest",
         "container_name": "master-thesis-gw",
@@ -133,6 +141,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
         ),
     }
 
+    # --- Server (only in Zone A)
     a_o2 = A_OCTET2_BASE
     server_ip = f"172.{a_o2}.{A_SERVER_OCTET3}.{A_SERVER_OCTET3}"  # 172.30.10.10
     server_gw = gw_ip(a_o2, A_SERVER_OCTET3)
@@ -169,11 +178,13 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
         ),
     }
 
+    # --- Hosts (A internal + external zones)
     for zi, z in enumerate(zones):
         o2 = A_OCTET2_BASE + zi
         host_count = hosts_per_zone[zi]
 
         if z == "A":
+            # internal hosts in A
             for i in range(1, host_count + 1):
                 o3 = HOST_OCTET3_START + (i - 1)
                 name = f"A_internal_host_{i:02d}"
@@ -208,6 +219,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                     ),
                 }
         else:
+            # external hosts in zone z
             for i in range(1, host_count + 1):
                 o3 = HOST_OCTET3_START + (i - 1)
                 name = f"{z}_external_host_{i:02d}"
@@ -216,7 +228,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                 gw_addr = gw_ip(o2, o3)
 
                 services[name] = {
-                    "image": WINE_IMAGE_NAME,
+                    "image": EXTERNAL_IMAGE_NAME,
                     "container_name": f"master-thesis-{name}",
                     "command": "sleep infinity",
                     "extra_hosts": [
@@ -226,9 +238,6 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                     ],
                     "cap_add": ["NET_ADMIN", "NET_RAW"],
                     "networks": {net: {"ipv4_address": ip_addr}},
-                    "environment": [
-                        "WINEDEBUG=-all",
-                    ],
                 }
 
                 services[f"{name}_route"] = {
@@ -246,6 +255,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                     ),
                 }
 
+    # --- Capture at gateway (all subnets)
     net_filter = " or ".join([f"net {s}" for s in all_subnets]) if all_subnets else "ip"
 
     services["capture"] = {
@@ -268,21 +278,51 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--zones", type=int, required=True, help="Number of zones (includes A). Example: 4 => A,B,C,D")
+
+    ap.add_argument("--zones", type=int, help="Number of zones (includes A). Example: 4 => A,B,C,D")
     ap.add_argument(
         "--hosts-per-zone",
         type=str,
-        required=True,
         help="Comma-separated host counts for zones A,B,C,... Example: 2,3,1,0",
     )
+    ap.add_argument("--topology", type=str, help="Path to simulated_topology.json")
     ap.add_argument("--pcap", default="gateway.pcap")
     ap.add_argument("--out", default="docker-compose.yml")
 
     args = ap.parse_args()
 
-    hosts_per_zone = parse_hosts_per_zone(args.hosts_per_zone, args.zones)
+    if args.topology:
+        with open(args.topology, "r", encoding="utf-8") as f:
+            topo = json.load(f)
+
+        if "zones" not in topo or "hosts_per_zone" not in topo:
+            ap.error("--topology file must contain 'zones' and 'hosts_per_zone'")
+
+        zones = topo["zones"]
+        hosts_per_zone = topo["hosts_per_zone"]
+
+        if not isinstance(zones, int):
+            ap.error("'zones' in topology file must be an integer")
+
+        if not isinstance(hosts_per_zone, list) or not all(isinstance(x, int) for x in hosts_per_zone):
+            ap.error("'hosts_per_zone' in topology file must be a list of integers")
+
+        if len(hosts_per_zone) != zones:
+            ap.error(
+                f"Topology mismatch: zones={zones} but hosts_per_zone has {len(hosts_per_zone)} entries"
+            )
+
+        hosts_per_zone = parse_hosts_per_zone(",".join(map(str, hosts_per_zone)), zones)
+
+    else:
+        if args.zones is None or args.hosts_per_zone is None:
+            ap.error("Either provide --topology or both --zones and --hosts-per-zone")
+
+        zones = args.zones
+        hosts_per_zone = parse_hosts_per_zone(args.hosts_per_zone, zones)
+
     compose = make_compose(
-        num_zones=args.zones,
+        num_zones=zones,
         hosts_per_zone=hosts_per_zone,
         pcap_filename=args.pcap,
     )

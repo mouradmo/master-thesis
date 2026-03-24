@@ -1,0 +1,95 @@
+{
+  "hosts": [
+    {
+      "ip": "10.10.0.1",
+      "role": "gateway_or_dns"
+    },
+    {
+      "ip": "10.10.0.255",
+      "role": "broadcast"
+    },
+    {
+      "ip": "10.10.0.4",
+      "role": "internal_host"
+    },
+    {
+      "ip": "224.0.0.251",
+      "role": "multicast"
+    },
+    {
+      "ip": "224.0.0.252",
+      "role": "multicast"
+    },
+    {
+      "ip": "239.255.255.250",
+      "role": "multicast"
+    },
+    {
+      "ip": "8.8.4.4",
+      "role": "external_dns"
+    },
+    {
+      "ip": "8.8.8.8",
+      "role": "external_dns"
+    }
+  ],
+  "edges": [
+    {
+      "src": "10.10.0.4",
+      "dst": "10.10.0.1",
+      "packet_count": 113,
+      "protocols": [
+        "DNS"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "10.10.0.255",
+      "packet_count": 39,
+      "protocols": [
+        "NBNS"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "224.0.0.251",
+      "packet_count": 34,
+      "protocols": [
+        "MDNS"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "224.0.0.252",
+      "packet_count": 34,
+      "protocols": [
+        "LLMNR"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "239.255.255.250",
+      "packet_count": 8,
+      "protocols": [
+        "SSDP"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "8.8.4.4",
+      "packet_count": 1,
+      "protocols": [
+        "DNS"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "8.8.8.8",
+      "packet_count": 90,
+      "protocols": [
+        "DNS",
+        "TCP"
+      ]
+    }
+  ]
+}

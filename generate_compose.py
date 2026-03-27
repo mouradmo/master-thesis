@@ -147,21 +147,50 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
     server_gw = gw_ip(a_o2, A_SERVER_OCTET3)
 
     services["server"] = {
-        "image": "nginx:alpine",
-        "container_name": "master-thesis-server",
-        "networks": {net_name_a_server(): {"ipv4_address": server_ip}},
-        "command": (
-            "sh -c \""
-            "cat > /etc/nginx/conf.d/default.conf <<'EOF'\n"
-            "server {\n"
-            "  listen 80;\n"
-            "  location / { return 200 'ok\\n'; }\n"
-            "}\n"
-            "EOF\n"
-            "nginx -g 'daemon off;'\n"
-            "\""
-        ),
-    }
+     "image": "nginx:alpine",
+     "container_name": "master-thesis-server",
+     "networks": {net_name_a_server(): {"ipv4_address": server_ip}},
+     "command": (
+        "sh -c \""
+        "cat > /etc/nginx/conf.d/default.conf <<'EOF'\n"
+        "server {\n"
+        "  listen 80;\n"
+        "\n"
+        "  location = / {\n"
+        "    default_type text/html;\n"
+        "    return 200 '<html><body><h1>It works</h1></body></html>\\n';\n"
+        "  }\n"
+        "\n"
+        "  location = /health {\n"
+        "    default_type text/plain;\n"
+        "    return 200 'healthy\\n';\n"
+        "  }\n"
+        "\n"
+        "  location = /index.html {\n"
+        "    default_type text/html;\n"
+        "    return 200 '<html><body><p>index page</p></body></html>\\n';\n"
+        "  }\n"
+        "\n"
+        "  location = /api/ping {\n"
+        "    default_type application/json;\n"
+        "    return 200 '{\"status\":\"ok\"}\\n';\n"
+        "  }\n"
+        "\n"
+        "  location = /api/beacon {\n"
+        "    default_type application/json;\n"
+        "    return 200 '{\"cmd\":\"sleep\",\"seconds\":5}\\n';\n"
+        "  }\n"
+        "\n"
+        "  location = /download/payload.txt {\n"
+        "    default_type text/plain;\n"
+        "    return 200 'example payload content\\n';\n"
+        "  }\n"
+        "}\n"
+        "EOF\n"
+        "nginx -g 'daemon off;'\n"
+        "\""
+    ),
+}
 
     services["server_route"] = {
         "image": "nicolaka/netshoot:latest",

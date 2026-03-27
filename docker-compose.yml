@@ -24,8 +24,13 @@ services:
     networks:
       A_server_net:
         ipv4_address: 172.30.10.10
-    command: "sh -c \"cat > /etc/nginx/conf.d/default.conf <<'EOF'\nserver {\n  listen 80;\n  location / { return 200 'ok\\\
-      n'; }\n}\nEOF\nnginx -g 'daemon off;'\n\""
+    command: "sh -c \"cat > /etc/nginx/conf.d/default.conf <<'EOF'\nserver {\n  listen 80;\n\n  location = / {\n    default_type\
+      \ text/html;\n    return 200 '<html><body><h1>It works</h1></body></html>\\n';\n  }\n\n  location = /health {\n    default_type\
+      \ text/plain;\n    return 200 'healthy\\n';\n  }\n\n  location = /index.html {\n    default_type text/html;\n    return\
+      \ 200 '<html><body><p>index page</p></body></html>\\n';\n  }\n\n  location = /api/ping {\n    default_type application/json;\n\
+      \    return 200 '{\"status\":\"ok\"}\\n';\n  }\n\n  location = /api/beacon {\n    default_type application/json;\n \
+      \   return 200 '{\"cmd\":\"sleep\",\"seconds\":5}\\n';\n  }\n\n  location = /download/payload.txt {\n    default_type\
+      \ text/plain;\n    return 200 'example payload content\\n';\n  }\n}\nEOF\nnginx -g 'daemon off;'\n\""
   server_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-server-route

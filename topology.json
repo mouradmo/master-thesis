@@ -92,5 +92,27 @@
         "TCP"
       ]
     }
+  ],
+  "dns_names": [
+    "settings-win.data.microsoft.com",
+    "ocos-office365-s2s.msedge.net",
+    "config.edge.skype.com",
+    "client-office365-tas.msedge.net",
+    "fs.microsoft.com",
+    "clients2.google.com",
+    "lnk.ua",
+    "accounts.google.com",
+    "pastefy.app",
+    "clientservices.googleapis.com",
+    "dns.msftncsi.com",
+    "dns.google",
+    "lkszditpm",
+    "gfrivpaiqg",
+    "isqrcsnilhopm",
+    "google.com",
+    "ssl.gstatic.com",
+    "www.gstatic.com",
+    "beacons.gvt2.com",
+    "beacons.gcp.gvt2.com"
   ]
 }

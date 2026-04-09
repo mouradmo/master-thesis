@@ -12,6 +12,7 @@ PRIVATE_NETWORKS = [
     ip_network("192.168.0.0/16"),
 ]
 
+
 def run_tshark(args):
     result = subprocess.run(
         ["tshark", "-r", PCAP] + args,
@@ -20,6 +21,7 @@ def run_tshark(args):
         check=True
     )
     return result.stdout
+
 
 def extract_packets():
     out = run_tshark([
@@ -55,6 +57,38 @@ def extract_packets():
 
     return hosts, edges
 
+
+def extract_dns_names():
+    out = run_tshark([
+        "-Y", "dns.flags.response == 0 and dns.qry.name",
+        "-T", "fields",
+        "-e", "dns.qry.name",
+        "-E", "separator=,",
+        "-E", "quote=n",
+        "-E", "occurrence=f",
+    ])
+
+    names = []
+    seen = set()
+
+    for line in out.splitlines():
+        name = line.strip().lower().rstrip(".")
+        if not name:
+            continue
+
+        # Skip obvious local discovery noise
+        if name in {"wpad", "wpad.local"}:
+            continue
+        if name.endswith(".local"):
+            continue
+
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+
+    return names
+
+
 def infer_role(ip):
     if ip in {"8.8.8.8", "8.8.4.4"}:
         return "external_dns"
@@ -68,9 +102,11 @@ def infer_role(ip):
         return "internal_host"
     return "external_host"
 
+
 def is_private_ip(ip):
     addr = ip_address(ip)
     return any(addr in net for net in PRIVATE_NETWORKS)
+
 
 def classify_for_sim(role, ip):
     if role in {"multicast", "broadcast"}:
@@ -81,7 +117,8 @@ def classify_for_sim(role, ip):
         return "internal"
     return "external"
 
-def build_simulated_topology(host_rows, edge_rows):
+
+def build_simulated_topology(host_rows, edge_rows, dns_names):
     internal_hosts = []
     external_hosts = []
     gateway_hosts = []
@@ -162,6 +199,7 @@ def build_simulated_topology(host_rows, edge_rows):
         "zones": len(zone_labels),
         "zone_labels": zone_labels,
         "hosts_per_zone": hosts_per_zone,
+        "dns_names": dns_names,
         "mapping": mapping_hosts,
         "ignored_hosts": ignored_hosts,
         "edges": filtered_edges,
@@ -169,7 +207,8 @@ def build_simulated_topology(host_rows, edge_rows):
             "Zone A contains internal hosts.",
             "Each external host is placed in its own zone.",
             "Gateway/DNS-like infrastructure is represented by service 'gw'.",
-            "Broadcast and multicast addresses are ignored for topology replication."
+            "Broadcast and multicast addresses are ignored for topology replication.",
+            "dns_names contains extracted DNS query names from the PCAP."
         ]
     }
 
@@ -179,9 +218,12 @@ def build_simulated_topology(host_rows, edge_rows):
     print("Wrote simulated_topology.json")
     print(f"zones={simulated_topology['zones']}")
     print("hosts_per_zone=" + ",".join(map(str, simulated_topology["hosts_per_zone"])))
+    print(f"dns_names={len(simulated_topology['dns_names'])}")
+
 
 def main():
     hosts, edges = extract_packets()
+    dns_names = extract_dns_names()
 
     host_rows = []
     for ip in sorted(hosts):
@@ -203,14 +245,17 @@ def main():
         "pcap_file": PCAP,
         "hosts": host_rows,
         "edges": edge_rows,
+        "dns_names": dns_names,
     }
 
     with open("topology.json", "w") as f:
         json.dump(topology, f, indent=2)
 
     print("Wrote topology.json")
+    print(f"dns_names={len(dns_names)}")
 
-    build_simulated_topology(host_rows, edge_rows)
+    build_simulated_topology(host_rows, edge_rows, dns_names)
+
 
 if __name__ == "__main__":
     main()

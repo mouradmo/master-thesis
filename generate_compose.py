@@ -76,9 +76,41 @@ def net_name_a_internal(i: int) -> str:
 
 def net_name_external(zone: str, i: int) -> str:
     return f"{zone}_external_host_{i:02d}_net"
+    
+def load_emulated_dns_names(topo: Dict[str, Any]) -> List[str]:
+    names = topo.get("dns_names", [])
+    if not isinstance(names, list):
+        return []
+
+    cleaned = []
+    seen = set()
+
+    for name in names:
+        if not isinstance(name, str):
+            continue
+
+        name = name.strip().lower().rstrip(".")
+        if not name:
+            continue
+
+        if name in {"wpad", "wpad.local"}:
+            continue
+        if name.endswith(".local"):
+            continue
+
+        if name not in seen:
+            seen.add(name)
+            cleaned.append(name)
+
+    return cleaned
 
 
-def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) -> Dict[str, Any]:
+def make_compose(
+    num_zones: int,
+    hosts_per_zone: List[int],
+    pcap_filename: str,
+    dns_names: List[str] | None = None,
+) -> Dict[str, Any]:
     zones = zone_letters(num_zones)
 
     compose: Dict[str, Any] = {"services": {}, "networks": {}}
@@ -146,21 +178,37 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
     server_ip = f"172.{a_o2}.{A_SERVER_OCTET3}.{A_SERVER_OCTET3}"  # 172.30.10.10
     server_gw = gw_ip(a_o2, A_SERVER_OCTET3)
 
+    base_dns_names = [
+        "server.local",
+        "c2.local",
+        "api.ipify.org",
+        "ipify.org",
+        "github.com",
+    ]
+
+    all_dns_names: List[str] = []
+    seen_dns = set()
+
+    for name in base_dns_names + (dns_names or []):
+        name = name.strip().lower().rstrip(".")
+        if not name:
+            continue
+        if name not in seen_dns:
+            seen_dns.add(name)
+            all_dns_names.append(name)
+
+    host_lines = "".join(f"        {server_ip} {name}\n" for name in all_dns_names)
+
     corefile_content = (
         ".:53 {\n"
         "    hosts {\n"
-        f"        {server_ip} server.local\n"
-        f"        {server_ip} c2.local\n"
-        f"        {server_ip} api.ipify.org\n"
-        f"        {server_ip} ipify.org\n"
-        f"        {server_ip} github.com\n"
+        f"{host_lines}"
         "        fallthrough\n"
         "    }\n"
         "    log\n"
         "    errors\n"
         "}\n"
     )
-
     Path("Corefile").write_text(corefile_content, encoding="utf-8")
 
     services["server"] = {
@@ -212,8 +260,7 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
         "\n"
         "server {\n"
         "  listen 80;\n"
-        "  server_name github.com;\n"
-        "\n"
+        "  server_name github.com pastefy.app;\n"        "\n"
         "  location = / {\n"
         "    default_type text/html;\n"
         "    return 200 '<html><body><h1>GitHub</h1></body></html>\\\\n';\n"
@@ -397,6 +444,8 @@ def main() -> None:
         with open(args.topology, "r", encoding="utf-8") as f:
             topo = json.load(f)
 
+        dns_names = load_emulated_dns_names(topo)
+
         if "zones" not in topo or "hosts_per_zone" not in topo:
             ap.error("--topology file must contain 'zones' and 'hosts_per_zone'")
 
@@ -422,11 +471,14 @@ def main() -> None:
 
         zones = args.zones
         hosts_per_zone = parse_hosts_per_zone(args.hosts_per_zone, zones)
+        dns_names = []
 
     compose = make_compose(
         num_zones=zones,
         hosts_per_zone=hosts_per_zone,
         pcap_filename=args.pcap,
+        dns_names=dns_names,
+
     )
 
     Path(args.out).write_text(

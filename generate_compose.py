@@ -14,7 +14,7 @@ GW_HOST_OCTET4 = 254
 A_OCTET2_BASE = 30
 A_SERVER_OCTET3 = 10
 HOST_OCTET3_START = 11  # host_01 -> 11 (=> .11.11), host_02 -> 12, ...
-
+CORE_DNS_IP = "172.30.10.53"
 # Linux image for external hosts
 EXTERNAL_IMAGE_NAME = "nicolaka/netshoot:latest"
 
@@ -146,6 +146,23 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
     server_ip = f"172.{a_o2}.{A_SERVER_OCTET3}.{A_SERVER_OCTET3}"  # 172.30.10.10
     server_gw = gw_ip(a_o2, A_SERVER_OCTET3)
 
+    corefile_content = (
+        ".:53 {\n"
+        "    hosts {\n"
+        f"        {server_ip} server.local\n"
+        f"        {server_ip} c2.local\n"
+        f"        {server_ip} api.ipify.org\n"
+        f"        {server_ip} ipify.org\n"
+        f"        {server_ip} github.com\n"
+        "        fallthrough\n"
+        "    }\n"
+        "    log\n"
+        "    errors\n"
+        "}\n"
+    )
+
+    Path("Corefile").write_text(corefile_content, encoding="utf-8")
+
     services["server"] = {
      "image": "nginx:alpine",
      "container_name": "master-thesis-server",
@@ -155,42 +172,83 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
         "cat > /etc/nginx/conf.d/default.conf <<'EOF'\n"
         "server {\n"
         "  listen 80;\n"
+        "  server_name server.local;\n"
         "\n"
         "  location = / {\n"
         "    default_type text/html;\n"
-        "    return 200 '<html><body><h1>It works</h1></body></html>\\n';\n"
+        "    return 200 '<html><body><h1>Internal test server</h1></body></html>\\\\n';\n"
         "  }\n"
         "\n"
         "  location = /health {\n"
         "    default_type text/plain;\n"
-        "    return 200 'healthy\\n';\n"
+        "    return 200 'healthy\\\\n';\n"
         "  }\n"
         "\n"
         "  location = /index.html {\n"
         "    default_type text/html;\n"
-        "    return 200 '<html><body><p>index page</p></body></html>\\n';\n"
+        "    return 200 '<html><body><p>index page</p></body></html>\\\\n';\n"
         "  }\n"
+        "}\n"
         "\n"
-        "  location = /api/ping {\n"
+        "server {\n"
+        "  listen 80;\n"
+        "  server_name c2.local;\n"
+        "\n"
+        "  location = / {\n"
         "    default_type application/json;\n"
-        "    return 200 '{\"status\":\"ok\"}\\n';\n"
+        "    return 200 '{\\\"status\\\":\\\"online\\\"}\\\\n';\n"
         "  }\n"
         "\n"
         "  location = /api/beacon {\n"
         "    default_type application/json;\n"
-        "    return 200 '{\"cmd\":\"sleep\",\"seconds\":5}\\n';\n"
+        "    return 200 '{\\\"cmd\\\":\\\"sleep\\\",\\\"seconds\\\":5}\\\\n';\n"
         "  }\n"
         "\n"
-        "  location = /download/payload.txt {\n"
+        "  location = /api/task {\n"
+        "    default_type application/json;\n"
+        "    return 200 '{\\\"task\\\":\\\"noop\\\"}\\\\n';\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "server {\n"
+        "  listen 80;\n"
+        "  server_name github.com;\n"
+        "\n"
+        "  location = / {\n"
+        "    default_type text/html;\n"
+        "    return 200 '<html><body><h1>GitHub</h1></body></html>\\\\n';\n"
+        "  }\n"
+        "\n"
+        "  location = /robots.txt {\n"
         "    default_type text/plain;\n"
-        "    return 200 'example payload content\\n';\n"
+        "    return 200 'User-agent: *\\\\nDisallow:\\\\n';\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "server {\n"
+        "  listen 80;\n"
+        "  server_name api.ipify.org ipify.org;\n"
+        "\n"
+        "  location = / {\n"
+        "    default_type text/plain;\n"
+        "    return 200 '203.0.113.10\\\\n';\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "server {\n"
+        "  listen 80 default_server;\n"
+        "  server_name _;\n"
+        "\n"
+        "  location / {\n"
+        "    default_type text/plain;\n"
+        "    return 200 'ok\\\\n';\n"
         "  }\n"
         "}\n"
         "EOF\n"
         "nginx -g 'daemon off;'\n"
         "\""
-    ),
-}
+         ),
+    }   
 
     services["server_route"] = {
         "image": "nicolaka/netshoot:latest",
@@ -202,6 +260,27 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
             "sh -c \""
             "ip route del default 2>/dev/null || true; "
             f"ip route add default via {server_gw}; "
+            "sleep infinity"
+            "\""
+        ),
+    }
+    services["dns"] = {
+        "image": "coredns/coredns:latest",
+        "container_name": "master-thesis-dns",
+        "networks": {net_name_a_server(): {"ipv4_address": CORE_DNS_IP}},
+        "volumes": ["./Corefile:/Corefile:ro"],
+        "command": ["-conf", "/Corefile"],
+     }
+    services["dns_route"] = {
+        "image": "nicolaka/netshoot:latest",
+        "container_name": "master-thesis-dns-route",
+        "network_mode": "service:dns",
+        "depends_on": ["dns", "gw"],
+        "cap_add": ["NET_ADMIN"],
+        "command": (
+            "sh -c \""
+            "ip route del default 2>/dev/null || true; "
+            "ip route add default via 172.30.10.254; "
             "sleep infinity"
             "\""
         ),
@@ -225,11 +304,8 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                     "image": "curlimages/curl:latest",
                     "container_name": f"master-thesis-{name}",
                     "command": "sleep infinity",
-                    "extra_hosts": [
-                        f"api.ipify.org:{server_ip}",
-                        f"ipify.org:{server_ip}",
-                        f"github.com:{server_ip}",
-                    ],
+                    "dns": [CORE_DNS_IP],
+                    "dns_search": ["local"],
                     "networks": {net: {"ipv4_address": ip_addr}},
                 }
 
@@ -260,11 +336,8 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
                     "image": EXTERNAL_IMAGE_NAME,
                     "container_name": f"master-thesis-{name}",
                     "command": "sleep infinity",
-                    "extra_hosts": [
-                        f"api.ipify.org:{server_ip}",
-                        f"ipify.org:{server_ip}",
-                        f"github.com:{server_ip}",
-                    ],
+                    "dns": [CORE_DNS_IP],
+                    "dns_search": ["local"],
                     "cap_add": ["NET_ADMIN", "NET_RAW"],
                     "networks": {net: {"ipv4_address": ip_addr}},
                 }

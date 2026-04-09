@@ -1,0 +1,12 @@
+.:53 {
+    hosts {
+        172.30.10.10 server.local
+        172.30.10.10 c2.local
+        172.30.10.10 api.ipify.org
+        172.30.10.10 ipify.org
+        172.30.10.10 github.com
+        fallthrough
+    }
+    log
+    errors
+}

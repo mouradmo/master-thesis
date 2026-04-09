@@ -32,11 +32,11 @@ services:
       \    return 200 '{\\\"status\\\":\\\"online\\\"}\\\\n';\n  }\n\n  location = /api/beacon {\n    default_type application/json;\n\
       \    return 200 '{\\\"cmd\\\":\\\"sleep\\\",\\\"seconds\\\":5}\\\\n';\n  }\n\n  location = /api/task {\n    default_type\
       \ application/json;\n    return 200 '{\\\"task\\\":\\\"noop\\\"}\\\\n';\n  }\n}\n\nserver {\n  listen 80;\n  server_name\
-      \ github.com pastefy.app;\n\n  location = / {\n    default_type text/html;\n    return 200 '<html><body><h1>GitHub</h1></body></html>\\\
-      \\n';\n  }\n\n  location = /robots.txt {\n    default_type text/plain;\n    return 200 'User-agent: *\\\\nDisallow:\\\
-      \\n';\n  }\n}\n\nserver {\n  listen 80;\n  server_name api.ipify.org ipify.org;\n\n  location = / {\n    default_type\
-      \ text/plain;\n    return 200 '203.0.113.10\\\\n';\n  }\n}\n\nserver {\n  listen 80 default_server;\n  server_name _;\n\
-      \n  location / {\n    default_type text/plain;\n    return 200 'ok\\\\n';\n  }\n}\nEOF\nnginx -g 'daemon off;'\n\""
+      \ api.ipify.org ipify.org;\n\n  location = / {\n    default_type text/plain;\n    return 200 '203.0.113.10\\\\n';\n\
+      \  }\n}\n\nserver {\n  listen 80 default_server;\n  server_name _;\n\n  location = / {\n    default_type text/html;\n\
+      \    return 200 '<html><body><h1>Generic web reply</h1></body></html>\\\\n';\n  }\n\n  location = /robots.txt {\n  \
+      \  default_type text/plain;\n    return 200 'User-agent: *\\\\nDisallow:\\\\n';\n  }\n}\nEOF\nnginx -g 'daemon off;'\n\
+      \""
   server_route:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-server-route

@@ -80,6 +80,7 @@ csv-to-flow.py input_csv  output_flow
 Run generate-compose.py
 
 ```bash
+python3 generate_compose.py --topology simulated_topology.json --out docker-compose.yml
 python3 generate_compose.py --zones x --hosts-per-zone y,z --pcap gateway.pcap
 
 ```
@@ -109,3 +110,5 @@ Running Zeek label file
 ```bash
 python3 label_zeek.py ground_truth.csv conn.log labeled_conn.csv
 ```
+
+python3 replay_requests.py --pcap 57627_dump.pcap --topology simulated_topology.json

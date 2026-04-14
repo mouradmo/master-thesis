@@ -148,8 +148,8 @@ services:
     - NET_RAW
     volumes:
     - ./:/data
-    command: sh -c "tcpdump -U -i any -nn -s 0 '(net 172.30.10.0/24 or net 172.30.11.0/24 or net 172.31.11.0/24 or net 172.32.11.0/24)
-      and not arp' -w /data/gateway.pcap"
+    command: sh -c "tcpdump -U -i any -nn -s 0 'src net 172.30.0.0/16 and (net 172.30.10.0/24 or net 172.30.11.0/24 or net
+      172.31.11.0/24 or net 172.32.11.0/24) and not arp' -w /data/gateway.pcap"
 networks:
   A_server_net:
     driver: bridge

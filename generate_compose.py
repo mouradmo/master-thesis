@@ -95,12 +95,6 @@ def load_emulated_dns_names(topo: Dict[str, Any]) -> List[str]:
         if not name:
             continue
 
-        # skip obvious noisy local discovery names
-        if name in {"wpad", "wpad.local"}:
-            continue
-        if name.endswith(".local"):
-            continue
-
         if name not in seen:
             seen.add(name)
             cleaned.append(name)
@@ -402,7 +396,7 @@ def make_compose(
         "volumes": ["./:/data"],
         "command": (
             "sh -c \""
-            f"tcpdump -U -i any -nn -s 0 '({net_filter}) and not arp' "
+            f"tcpdump -U -i any -nn -s 0 '({net_filter})' "
             f"-w /data/{pcap_filename}"
             "\""
         ),

@@ -34,10 +34,6 @@ def extract_events(pcap):
         name = name.lower().rstrip(".")
         if not ts or not src or not dst or not name:
             continue
-        if dst.startswith("224.") or dst.startswith("239.") or dst.endswith(".255"):
-            continue
-        if name in {"wpad", "wpad.local"} or name.endswith(".local"):
-            continue
         events.append(("dns", float(ts), src, name, None))
 
     out = tshark(
@@ -55,10 +51,6 @@ def extract_events(pcap):
         uri = parts[5] if len(parts) > 5 and parts[5] else "/"
         if not ts or not src or not dst:
             continue
-        if dst.startswith("224.") or dst.startswith("239.") or dst.endswith(".255"):
-            continue
-        if method == "M-SEARCH":
-            continue
         events.append(("http", float(ts), src, host, (method, uri)))
 
     events.sort(key=lambda x: (x[1], 0 if x[0] == "dns" else 1))
@@ -66,8 +58,7 @@ def extract_events(pcap):
 
 
 def replay(events, mapping, max_gap):
-    events = [e for e in events if e[2] in mapping and mapping[e[2]].get("sim_type") == "internal"]
-
+    events = [e for e in events if e[2] in mapping]
     if not events:
         print("No matching events found.")
         return

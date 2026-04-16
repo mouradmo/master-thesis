@@ -10,6 +10,8 @@
         172.30.10.10 config.edge.skype.com
         172.30.10.10 client-office365-tas.msedge.net
         172.30.10.10 fs.microsoft.com
+        172.30.10.10 wpad.local
+        172.30.10.10 wpad
         172.30.10.10 clients2.google.com
         172.30.10.10 lnk.ua
         172.30.10.10 accounts.google.com
@@ -17,10 +19,14 @@
         172.30.10.10 clientservices.googleapis.com
         172.30.10.10 dns.msftncsi.com
         172.30.10.10 dns.google
+        172.30.10.10 lkszditpm.local
         172.30.10.10 lkszditpm
+        172.30.10.10 gfrivpaiqg.local
         172.30.10.10 gfrivpaiqg
+        172.30.10.10 isqrcsnilhopm.local
         172.30.10.10 isqrcsnilhopm
         172.30.10.10 google.com
+        172.30.10.10 _googlecast._tcp.local
         172.30.10.10 ssl.gstatic.com
         172.30.10.10 www.gstatic.com
         172.30.10.10 beacons.gvt2.com

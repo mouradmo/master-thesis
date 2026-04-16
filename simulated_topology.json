@@ -1,12 +1,18 @@
 {
   "pcap_file": "57627_dump.pcap",
-  "zones": 3,
+  "zones": 6,
   "zone_labels": [
     "A",
     "B",
-    "C"
+    "C",
+    "D",
+    "E",
+    "F"
   ],
   "hosts_per_zone": [
+    2,
+    1,
+    1,
     1,
     1,
     1
@@ -17,6 +23,8 @@
     "config.edge.skype.com",
     "client-office365-tas.msedge.net",
     "fs.microsoft.com",
+    "wpad.local",
+    "wpad",
     "clients2.google.com",
     "lnk.ua",
     "accounts.google.com",
@@ -24,10 +32,14 @@
     "clientservices.googleapis.com",
     "dns.msftncsi.com",
     "dns.google",
+    "lkszditpm.local",
     "lkszditpm",
+    "gfrivpaiqg.local",
     "gfrivpaiqg",
+    "isqrcsnilhopm.local",
     "isqrcsnilhopm",
     "google.com",
+    "_googlecast._tcp.local",
     "ssl.gstatic.com",
     "www.gstatic.com",
     "beacons.gvt2.com",
@@ -35,25 +47,53 @@
   ],
   "mapping": [
     {
-      "original_ip": "10.10.0.4",
-      "original_role": "internal_host",
+      "original_ip": "10.10.0.255",
+      "original_role": "broadcast",
       "sim_type": "internal",
       "zone": "A",
       "service_name": "A_internal_host_01"
     },
     {
-      "original_ip": "8.8.4.4",
-      "original_role": "external_dns",
+      "original_ip": "10.10.0.4",
+      "original_role": "internal_host",
+      "sim_type": "internal",
+      "zone": "A",
+      "service_name": "A_internal_host_02"
+    },
+    {
+      "original_ip": "224.0.0.251",
+      "original_role": "multicast",
       "sim_type": "external",
       "zone": "B",
       "service_name": "B_external_host_01"
     },
     {
-      "original_ip": "8.8.8.8",
-      "original_role": "external_dns",
+      "original_ip": "224.0.0.252",
+      "original_role": "multicast",
       "sim_type": "external",
       "zone": "C",
       "service_name": "C_external_host_01"
+    },
+    {
+      "original_ip": "239.255.255.250",
+      "original_role": "multicast",
+      "sim_type": "external",
+      "zone": "D",
+      "service_name": "D_external_host_01"
+    },
+    {
+      "original_ip": "8.8.4.4",
+      "original_role": "external_dns",
+      "sim_type": "external",
+      "zone": "E",
+      "service_name": "E_external_host_01"
+    },
+    {
+      "original_ip": "8.8.8.8",
+      "original_role": "external_dns",
+      "sim_type": "external",
+      "zone": "F",
+      "service_name": "F_external_host_01"
     },
     {
       "original_ip": "10.10.0.1",
@@ -63,33 +103,12 @@
       "service_name": "gw"
     }
   ],
-  "ignored_hosts": [
-    {
-      "original_ip": "10.10.0.255",
-      "original_role": "broadcast",
-      "sim_type": "ignore"
-    },
-    {
-      "original_ip": "224.0.0.251",
-      "original_role": "multicast",
-      "sim_type": "ignore"
-    },
-    {
-      "original_ip": "224.0.0.252",
-      "original_role": "multicast",
-      "sim_type": "ignore"
-    },
-    {
-      "original_ip": "239.255.255.250",
-      "original_role": "multicast",
-      "sim_type": "ignore"
-    }
-  ],
+  "ignored_hosts": [],
   "edges": [
     {
       "src_original_ip": "10.10.0.4",
       "dst_original_ip": "10.10.0.1",
-      "src_service": "A_internal_host_01",
+      "src_service": "A_internal_host_02",
       "dst_service": "gw",
       "packet_count": 113,
       "protocols": [
@@ -98,9 +117,49 @@
     },
     {
       "src_original_ip": "10.10.0.4",
-      "dst_original_ip": "8.8.4.4",
-      "src_service": "A_internal_host_01",
+      "dst_original_ip": "10.10.0.255",
+      "src_service": "A_internal_host_02",
+      "dst_service": "A_internal_host_01",
+      "packet_count": 39,
+      "protocols": [
+        "NBNS"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "224.0.0.251",
+      "src_service": "A_internal_host_02",
       "dst_service": "B_external_host_01",
+      "packet_count": 34,
+      "protocols": [
+        "MDNS"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "224.0.0.252",
+      "src_service": "A_internal_host_02",
+      "dst_service": "C_external_host_01",
+      "packet_count": 34,
+      "protocols": [
+        "LLMNR"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "239.255.255.250",
+      "src_service": "A_internal_host_02",
+      "dst_service": "D_external_host_01",
+      "packet_count": 8,
+      "protocols": [
+        "SSDP"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "8.8.4.4",
+      "src_service": "A_internal_host_02",
+      "dst_service": "E_external_host_01",
       "packet_count": 1,
       "protocols": [
         "DNS"
@@ -109,8 +168,8 @@
     {
       "src_original_ip": "10.10.0.4",
       "dst_original_ip": "8.8.8.8",
-      "src_service": "A_internal_host_01",
-      "dst_service": "C_external_host_01",
+      "src_service": "A_internal_host_02",
+      "dst_service": "F_external_host_01",
       "packet_count": 90,
       "protocols": [
         "DNS",

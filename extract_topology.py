@@ -76,12 +76,6 @@ def extract_dns_names():
         if not name:
             continue
 
-        # Skip obvious local discovery noise
-        if name in {"wpad", "wpad.local"}:
-            continue
-        if name.endswith(".local"):
-            continue
-
         if name not in seen:
             seen.add(name)
             names.append(name)
@@ -109,8 +103,6 @@ def is_private_ip(ip):
 
 
 def classify_for_sim(role, ip):
-    if role in {"multicast", "broadcast"}:
-        return "ignore"
     if role == "gateway_or_dns":
         return "gateway"
     if is_private_ip(ip):
@@ -141,11 +133,8 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
             external_hosts.append(item)
         elif sim_type == "gateway":
             gateway_hosts.append(item)
-        else:
-            ignored_hosts.append(item)
 
     mapping_hosts = []
-    ignored_ips = {item["original_ip"] for item in ignored_hosts}
 
     for i, host in enumerate(sorted(internal_hosts, key=lambda x: x["original_ip"]), start=1):
         mapping_hosts.append({
@@ -178,9 +167,6 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
     for edge in edge_rows:
         src = edge["src"]
         dst = edge["dst"]
-
-        if src in ignored_ips or dst in ignored_ips:
-            continue
 
         filtered_edges.append({
             "src_original_ip": src,

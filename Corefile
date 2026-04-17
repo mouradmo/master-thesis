@@ -5,32 +5,46 @@
         172.30.10.10 api.ipify.org
         172.30.10.10 ipify.org
         172.30.10.10 github.com
-        172.30.10.10 settings-win.data.microsoft.com
-        172.30.10.10 ocos-office365-s2s.msedge.net
-        172.30.10.10 config.edge.skype.com
-        172.30.10.10 client-office365-tas.msedge.net
-        172.30.10.10 fs.microsoft.com
-        172.30.10.10 wpad.local
-        172.30.10.10 wpad
-        172.30.10.10 clients2.google.com
-        172.30.10.10 lnk.ua
-        172.30.10.10 accounts.google.com
-        172.30.10.10 pastefy.app
-        172.30.10.10 clientservices.googleapis.com
-        172.30.10.10 dns.msftncsi.com
-        172.30.10.10 dns.google
-        172.30.10.10 lkszditpm.local
-        172.30.10.10 lkszditpm
-        172.30.10.10 gfrivpaiqg.local
-        172.30.10.10 gfrivpaiqg
-        172.30.10.10 isqrcsnilhopm.local
-        172.30.10.10 isqrcsnilhopm
-        172.30.10.10 google.com
-        172.30.10.10 _googlecast._tcp.local
+        172.30.10.10 time.nist.gov
+        172.30.10.10 localhost
+        172.30.10.10 ntp1.dlink.com
+        172.30.10.10 dr._dns-sd._udp.0.88.168.192.in-addr.arpa
+        172.30.10.10 ooxvmbggoq
+        172.30.10.10 fyhrqwf
+        172.30.10.10 p15-calendars.icloud.com
+        172.30.10.10 mtalk.google.com
+        172.30.10.10 swscan.apple.com
+        172.30.10.10 local
+        172.30.10.10 db._dns-sd._udp.0.162.168.192.in-addr.arpa
+        172.30.10.10 b._dns-sd._udp.0.162.168.192.in-addr.arpa
+        172.30.10.10 r._dns-sd._udp.0.162.168.192.in-addr.arpa
+        172.30.10.10 dr._dns-sd._udp.0.162.168.192.in-addr.arpa
+        172.30.10.10 b._dns-sd._udp.0.223.168.192.in-addr.arpa
+        172.30.10.10 db._dns-sd._udp.0.223.168.192.in-addr.arpa
+        172.30.10.10 r._dns-sd._udp.0.223.168.192.in-addr.arpa
+        172.30.10.10 dr._dns-sd._udp.0.223.168.192.in-addr.arpa
+        172.30.10.10 b._dns-sd._udp.0.88.168.192.in-addr.arpa
+        172.30.10.10 db._dns-sd._udp.0.88.168.192.in-addr.arpa
+        172.30.10.10 r._dns-sd._udp.0.88.168.192.in-addr.arpa
+        172.30.10.10 apple.com
+        172.30.10.10 clients4.google.com
+        172.30.10.10 imap01.binero.se
+        172.30.10.10 imap.googlemail.com
+        172.30.10.10 plus.google.com
+        172.30.10.10 csi.gstatic.com
         172.30.10.10 ssl.gstatic.com
-        172.30.10.10 www.gstatic.com
-        172.30.10.10 beacons.gvt2.com
-        172.30.10.10 beacons.gcp.gvt2.com
+        172.30.10.10 ax.itunes.apple.com
+        172.30.10.10 www.apple.com
+        172.30.10.10 52.88.168.192.in-addr.arpa
+        172.30.10.10 pmtsyzgjsqjoc
+        172.30.10.10 asbowhwmui
+        172.30.10.10 spqrugncxyethxu
+        172.30.10.10 www.tunnelblick.net
+        172.30.10.10 www.google.com
+        172.30.10.10 p06-caldav.icloud.com
+        172.30.10.10 p06-contacts.icloud.com
+        172.30.10.10 apple-finance.query.yahoo.com
+        172.30.10.10 p06-keyvalueservice.icloud.com
         fallthrough
     }
     log

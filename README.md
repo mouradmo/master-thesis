@@ -111,4 +111,3 @@ Running Zeek label file
 python3 label_zeek.py ground_truth.csv conn.log labeled_conn.csv
 ```
 
-python3 replay_requests.py --pcap 57627_dump.pcap --topology simulated_topology.json

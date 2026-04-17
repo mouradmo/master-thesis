@@ -396,7 +396,7 @@ def make_compose(
         "volumes": ["./:/data"],
         "command": (
             "sh -c \""
-            f"tcpdump -U -i any -nn -s 0 '({net_filter})' "
+            f"tcpdump -U -i any -nn -s 0 '({net_filter}) and not arp' "
             f"-w /data/{pcap_filename}"
             "\""
         ),

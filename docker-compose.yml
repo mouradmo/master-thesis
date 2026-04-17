@@ -14,16 +14,20 @@ services:
         ipv4_address: 172.30.11.254
       A_internal_host_02_net:
         ipv4_address: 172.30.12.254
+      A_internal_host_03_net:
+        ipv4_address: 172.30.13.254
+      A_internal_host_04_net:
+        ipv4_address: 172.30.14.254
+      A_internal_host_05_net:
+        ipv4_address: 172.30.15.254
+      A_internal_host_06_net:
+        ipv4_address: 172.30.16.254
       B_external_host_01_net:
         ipv4_address: 172.31.11.254
       C_external_host_01_net:
         ipv4_address: 172.32.11.254
       D_external_host_01_net:
         ipv4_address: 172.33.11.254
-      E_external_host_01_net:
-        ipv4_address: 172.34.11.254
-      F_external_host_01_net:
-        ipv4_address: 172.35.11.254
     command: sh -c "iptables -F; iptables -t nat -F; iptables -t mangle -F; iptables -P INPUT ACCEPT; iptables -P OUTPUT ACCEPT;
       iptables -P FORWARD ACCEPT; echo 'GW ready'; sleep infinity"
   server:
@@ -118,6 +122,90 @@ services:
     cap_add:
     - NET_ADMIN
     command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.30.12.254; sleep infinity"
+  A_internal_host_03:
+    image: curlimages/curl:latest
+    container_name: master-thesis-A_internal_host_03
+    command: sleep infinity
+    dns:
+    - 172.30.10.53
+    dns_search:
+    - local
+    networks:
+      A_internal_host_03_net:
+        ipv4_address: 172.30.13.13
+  A_internal_host_03_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-A_internal_host_03-route
+    network_mode: service:A_internal_host_03
+    depends_on:
+    - A_internal_host_03
+    - gw
+    cap_add:
+    - NET_ADMIN
+    command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.30.13.254; sleep infinity"
+  A_internal_host_04:
+    image: curlimages/curl:latest
+    container_name: master-thesis-A_internal_host_04
+    command: sleep infinity
+    dns:
+    - 172.30.10.53
+    dns_search:
+    - local
+    networks:
+      A_internal_host_04_net:
+        ipv4_address: 172.30.14.14
+  A_internal_host_04_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-A_internal_host_04-route
+    network_mode: service:A_internal_host_04
+    depends_on:
+    - A_internal_host_04
+    - gw
+    cap_add:
+    - NET_ADMIN
+    command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.30.14.254; sleep infinity"
+  A_internal_host_05:
+    image: curlimages/curl:latest
+    container_name: master-thesis-A_internal_host_05
+    command: sleep infinity
+    dns:
+    - 172.30.10.53
+    dns_search:
+    - local
+    networks:
+      A_internal_host_05_net:
+        ipv4_address: 172.30.15.15
+  A_internal_host_05_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-A_internal_host_05-route
+    network_mode: service:A_internal_host_05
+    depends_on:
+    - A_internal_host_05
+    - gw
+    cap_add:
+    - NET_ADMIN
+    command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.30.15.254; sleep infinity"
+  A_internal_host_06:
+    image: curlimages/curl:latest
+    container_name: master-thesis-A_internal_host_06
+    command: sleep infinity
+    dns:
+    - 172.30.10.53
+    dns_search:
+    - local
+    networks:
+      A_internal_host_06_net:
+        ipv4_address: 172.30.16.16
+  A_internal_host_06_route:
+    image: nicolaka/netshoot:latest
+    container_name: master-thesis-A_internal_host_06-route
+    network_mode: service:A_internal_host_06
+    depends_on:
+    - A_internal_host_06
+    - gw
+    cap_add:
+    - NET_ADMIN
+    command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.30.16.254; sleep infinity"
   B_external_host_01:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-B_external_host_01
@@ -190,54 +278,6 @@ services:
     cap_add:
     - NET_ADMIN
     command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.33.11.254; sleep infinity"
-  E_external_host_01:
-    image: nicolaka/netshoot:latest
-    container_name: master-thesis-E_external_host_01
-    command: sleep infinity
-    dns:
-    - 172.30.10.53
-    dns_search:
-    - local
-    cap_add:
-    - NET_ADMIN
-    - NET_RAW
-    networks:
-      E_external_host_01_net:
-        ipv4_address: 172.34.11.11
-  E_external_host_01_route:
-    image: nicolaka/netshoot:latest
-    container_name: master-thesis-E_external_host_01-route
-    network_mode: service:E_external_host_01
-    depends_on:
-    - E_external_host_01
-    - gw
-    cap_add:
-    - NET_ADMIN
-    command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.34.11.254; sleep infinity"
-  F_external_host_01:
-    image: nicolaka/netshoot:latest
-    container_name: master-thesis-F_external_host_01
-    command: sleep infinity
-    dns:
-    - 172.30.10.53
-    dns_search:
-    - local
-    cap_add:
-    - NET_ADMIN
-    - NET_RAW
-    networks:
-      F_external_host_01_net:
-        ipv4_address: 172.35.11.11
-  F_external_host_01_route:
-    image: nicolaka/netshoot:latest
-    container_name: master-thesis-F_external_host_01-route
-    network_mode: service:F_external_host_01
-    depends_on:
-    - F_external_host_01
-    - gw
-    cap_add:
-    - NET_ADMIN
-    command: sh -c "ip route del default 2>/dev/null || true; ip route add default via 172.35.11.254; sleep infinity"
   capture:
     image: nicolaka/netshoot:latest
     container_name: master-thesis-capture
@@ -249,8 +289,9 @@ services:
     - NET_RAW
     volumes:
     - ./:/data
-    command: sh -c "tcpdump -U -i any -nn -s 0 '(net 172.30.10.0/24 or net 172.30.11.0/24 or net 172.30.12.0/24 or net 172.31.11.0/24
-      or net 172.32.11.0/24 or net 172.33.11.0/24 or net 172.34.11.0/24 or net 172.35.11.0/24)' -w /data/gateway.pcap"
+    command: sh -c "tcpdump -U -i any -nn -s 0 '(net 172.30.10.0/24 or net 172.30.11.0/24 or net 172.30.12.0/24 or net 172.30.13.0/24
+      or net 172.30.14.0/24 or net 172.30.15.0/24 or net 172.30.16.0/24 or net 172.31.11.0/24 or net 172.32.11.0/24 or net
+      172.33.11.0/24) and not arp' -w /data/gateway.pcap"
 networks:
   A_server_net:
     driver: bridge
@@ -267,6 +308,26 @@ networks:
     ipam:
       config:
       - subnet: 172.30.12.0/24
+  A_internal_host_03_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.13.0/24
+  A_internal_host_04_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.14.0/24
+  A_internal_host_05_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.15.0/24
+  A_internal_host_06_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.16.0/24
   B_external_host_01_net:
     driver: bridge
     ipam:
@@ -282,13 +343,3 @@ networks:
     ipam:
       config:
       - subnet: 172.33.11.0/24
-  E_external_host_01_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.34.11.0/24
-  F_external_host_01_net:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 172.35.11.0/24

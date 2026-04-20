@@ -1,49 +1,33 @@
 {
-  "pcap_file": "test.pcap",
+  "pcap_file": "57627_dump.pcap",
   "hosts": [
     {
-      "ip": "10.10.10.10",
-      "role": "internal_host"
-    },
-    {
-      "ip": "10.10.10.20",
-      "role": "internal_host"
-    },
-    {
-      "ip": "10.10.10.30",
-      "role": "internal_host"
-    },
-    {
-      "ip": "17.253.34.253",
-      "role": "external_host"
-    },
-    {
-      "ip": "192.168.88.1",
+      "ip": "10.10.0.1",
       "role": "gateway_or_dns"
     },
     {
-      "ip": "192.168.88.52",
+      "ip": "10.10.0.255",
+      "role": "broadcast"
+    },
+    {
+      "ip": "10.10.0.4",
       "role": "internal_host"
     },
     {
-      "ip": "192.168.88.61",
-      "role": "internal_host"
+      "ip": "224.0.0.251",
+      "role": "multicast"
     },
     {
-      "ip": "192.168.89.1",
-      "role": "gateway_or_dns"
+      "ip": "224.0.0.252",
+      "role": "multicast"
     },
     {
-      "ip": "192.168.89.2",
-      "role": "internal_host"
+      "ip": "239.255.255.250",
+      "role": "multicast"
     },
     {
-      "ip": "192.195.142.13",
-      "role": "external_host"
-    },
-    {
-      "ip": "21.2.2.2",
-      "role": "external_host"
+      "ip": "8.8.4.4",
+      "role": "external_dns"
     },
     {
       "ip": "8.8.8.8",
@@ -52,161 +36,96 @@
   ],
   "edges": [
     {
-      "src": "10.10.10.10",
-      "dst": "10.10.10.20",
-      "packet_count": 51470,
-      "protocols": [
-        "S7COMM",
-        "TCP"
-      ]
-    },
-    {
-      "src": "10.10.10.10",
-      "dst": "10.10.10.30",
-      "packet_count": 33135,
-      "protocols": [
-        "S7COMM",
-        "TCP",
-        "TPKT"
-      ]
-    },
-    {
-      "src": "10.10.10.20",
-      "dst": "10.10.10.10",
-      "packet_count": 94859,
-      "protocols": [
-        "S7COMM",
-        "TCP"
-      ]
-    },
-    {
-      "src": "10.10.10.30",
-      "dst": "10.10.10.10",
-      "packet_count": 29476,
-      "protocols": [
-        "S7COMM",
-        "TCP"
-      ]
-    },
-    {
-      "src": "192.168.88.1",
-      "dst": "192.168.88.52",
-      "packet_count": 77,
+      "src": "10.10.0.4",
+      "dst": "10.10.0.1",
+      "packet_count": 113,
       "protocols": [
         "DNS"
       ]
     },
     {
-      "src": "192.168.88.1",
-      "dst": "192.168.88.61",
-      "packet_count": 12330,
+      "src": "10.10.0.4",
+      "dst": "10.10.0.255",
+      "packet_count": 39,
+      "protocols": [
+        "NBNS"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "224.0.0.251",
+      "packet_count": 34,
+      "protocols": [
+        "MDNS"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "224.0.0.252",
+      "packet_count": 34,
+      "protocols": [
+        "LLMNR"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "239.255.255.250",
+      "packet_count": 8,
+      "protocols": [
+        "SSDP"
+      ]
+    },
+    {
+      "src": "10.10.0.4",
+      "dst": "8.8.4.4",
+      "packet_count": 1,
       "protocols": [
         "DNS"
       ]
     },
     {
-      "src": "192.168.88.52",
-      "dst": "192.168.88.1",
-      "packet_count": 109,
+      "src": "10.10.0.4",
+      "dst": "8.8.8.8",
+      "packet_count": 90,
       "protocols": [
         "DNS",
-        "UDP"
-      ]
-    },
-    {
-      "src": "192.168.88.52",
-      "dst": "192.195.142.13",
-      "packet_count": 5,
-      "protocols": [
-        "OpenVPN"
-      ]
-    },
-    {
-      "src": "192.168.88.61",
-      "dst": "192.168.88.1",
-      "packet_count": 12331,
-      "protocols": [
-        "DNS"
-      ]
-    },
-    {
-      "src": "192.168.89.1",
-      "dst": "192.168.89.2",
-      "packet_count": 2735,
-      "protocols": [
-        "ICMP"
-      ]
-    },
-    {
-      "src": "192.168.89.2",
-      "dst": "17.253.34.253",
-      "packet_count": 4,
-      "protocols": [
-        "NTP"
-      ]
-    },
-    {
-      "src": "192.168.89.2",
-      "dst": "8.8.8.8",
-      "packet_count": 2731,
-      "protocols": [
-        "DNS"
-      ]
-    },
-    {
-      "src": "21.2.2.2",
-      "dst": "192.168.88.52",
-      "packet_count": 5,
-      "protocols": [
-        "ICMP"
+        "TCP"
       ]
     }
   ],
   "dns_names": [
-    "time.nist.gov",
-    "localhost",
-    "ntp1.dlink.com",
-    "dr._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "ooxvmbggoq",
-    "fyhrqwf",
-    "p15-calendars.icloud.com",
-    "mtalk.google.com",
-    "swscan.apple.com",
-    "local",
-    "db._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "b._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "r._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "dr._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "b._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "db._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "r._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "dr._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "b._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "db._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "r._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "apple.com",
-    "clients4.google.com",
-    "imap01.binero.se",
-    "imap.googlemail.com",
-    "plus.google.com",
-    "csi.gstatic.com",
+    "settings-win.data.microsoft.com",
+    "ocos-office365-s2s.msedge.net",
+    "config.edge.skype.com",
+    "client-office365-tas.msedge.net",
+    "fs.microsoft.com",
+    "wpad.local",
+    "wpad",
+    "clients2.google.com",
+    "lnk.ua",
+    "accounts.google.com",
+    "pastefy.app",
+    "clientservices.googleapis.com",
+    "dns.msftncsi.com",
+    "dns.google",
+    "lkszditpm.local",
+    "lkszditpm",
+    "gfrivpaiqg.local",
+    "gfrivpaiqg",
+    "isqrcsnilhopm.local",
+    "isqrcsnilhopm",
+    "google.com",
+    "_googlecast._tcp.local",
     "ssl.gstatic.com",
-    "ax.itunes.apple.com",
-    "www.apple.com",
-    "52.88.168.192.in-addr.arpa",
-    "pmtsyzgjsqjoc",
-    "asbowhwmui",
-    "spqrugncxyethxu",
-    "www.tunnelblick.net",
-    "www.google.com",
-    "p06-caldav.icloud.com",
-    "p06-contacts.icloud.com",
-    "apple-finance.query.yahoo.com",
-    "p06-keyvalueservice.icloud.com"
+    "www.gstatic.com",
+    "beacons.gvt2.com",
+    "beacons.gcp.gvt2.com"
   ],
   "dns_server_ips": [
-    "192.168.88.1",
-    "192.168.89.2",
+    "10.10.0.1",
+    "224.0.0.251",
+    "224.0.0.252",
+    "8.8.4.4",
     "8.8.8.8"
   ]
 }

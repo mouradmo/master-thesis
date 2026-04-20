@@ -111,3 +111,9 @@ Running Zeek label file
 python3 label_zeek.py ground_truth.csv conn.log labeled_conn.csv
 ```
 
+Start/stop gateway capture in interface any
+```bash
+docker compose --profile capture up -d
+docker compose stop capture
+```
+

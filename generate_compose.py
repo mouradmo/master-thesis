@@ -388,17 +388,18 @@ def make_compose(
     net_filter = " or ".join([f"net {s}" for s in all_subnets]) if all_subnets else "ip"
 
     services["capture"] = {
-        "image": "nicolaka/netshoot:latest",
-        "container_name": "master-thesis-capture",
-        "network_mode": "service:gw",
-        "depends_on": ["gw"],
-        "cap_add": ["NET_ADMIN", "NET_RAW"],
-        "volumes": ["./:/data"],
-        "command": (
-            "sh -c \""
-            f"tcpdump -U -i any -nn -s 0 '({net_filter}) and not arp' "
-            f"-w /data/{pcap_filename}"
-            "\""
+      "image": "nicolaka/netshoot:latest",
+      "container_name": "master-thesis-capture",
+      "profiles": ["capture"],
+      "network_mode": "service:gw",
+      "depends_on": ["gw"],
+      "cap_add": ["NET_ADMIN", "NET_RAW"],
+      "volumes": ["./:/data"],
+      "command": (
+        "sh -c \""
+        f"tcpdump -U -i any -nn -s 0 '({net_filter}) and not arp' "
+        f"-w /data/{pcap_filename}"
+        "\""
         ),
     }
 

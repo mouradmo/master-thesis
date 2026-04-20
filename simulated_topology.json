@@ -1,63 +1,43 @@
 {
-  "pcap_file": "test.pcap",
-  "zones": 4,
+  "pcap_file": "57627_dump.pcap",
+  "zones": 1,
   "zone_labels": [
-    "A",
-    "B",
-    "C",
-    "D"
+    "A"
   ],
   "hosts_per_zone": [
-    6,
-    1,
-    1,
     1
   ],
   "dns_names": [
-    "time.nist.gov",
-    "localhost",
-    "ntp1.dlink.com",
-    "dr._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "ooxvmbggoq",
-    "fyhrqwf",
-    "p15-calendars.icloud.com",
-    "mtalk.google.com",
-    "swscan.apple.com",
-    "local",
-    "db._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "b._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "r._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "dr._dns-sd._udp.0.162.168.192.in-addr.arpa",
-    "b._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "db._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "r._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "dr._dns-sd._udp.0.223.168.192.in-addr.arpa",
-    "b._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "db._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "r._dns-sd._udp.0.88.168.192.in-addr.arpa",
-    "apple.com",
-    "clients4.google.com",
-    "imap01.binero.se",
-    "imap.googlemail.com",
-    "plus.google.com",
-    "csi.gstatic.com",
+    "settings-win.data.microsoft.com",
+    "ocos-office365-s2s.msedge.net",
+    "config.edge.skype.com",
+    "client-office365-tas.msedge.net",
+    "fs.microsoft.com",
+    "wpad.local",
+    "wpad",
+    "clients2.google.com",
+    "lnk.ua",
+    "accounts.google.com",
+    "pastefy.app",
+    "clientservices.googleapis.com",
+    "dns.msftncsi.com",
+    "dns.google",
+    "lkszditpm.local",
+    "lkszditpm",
+    "gfrivpaiqg.local",
+    "gfrivpaiqg",
+    "isqrcsnilhopm.local",
+    "isqrcsnilhopm",
+    "google.com",
+    "_googlecast._tcp.local",
     "ssl.gstatic.com",
-    "ax.itunes.apple.com",
-    "www.apple.com",
-    "52.88.168.192.in-addr.arpa",
-    "pmtsyzgjsqjoc",
-    "asbowhwmui",
-    "spqrugncxyethxu",
-    "www.tunnelblick.net",
-    "www.google.com",
-    "p06-caldav.icloud.com",
-    "p06-contacts.icloud.com",
-    "apple-finance.query.yahoo.com",
-    "p06-keyvalueservice.icloud.com"
+    "www.gstatic.com",
+    "beacons.gvt2.com",
+    "beacons.gcp.gvt2.com"
   ],
   "mapping": [
     {
-      "original_ip": "10.10.10.10",
+      "original_ip": "10.10.0.4",
       "original_role": "internal_host",
       "sim_type": "internal",
       "zone": "A",
@@ -66,79 +46,7 @@
       "gateway_ip": "172.30.11.254"
     },
     {
-      "original_ip": "10.10.10.20",
-      "original_role": "internal_host",
-      "sim_type": "internal",
-      "zone": "A",
-      "service_name": "A_internal_host_02",
-      "simulated_ip": "172.30.12.12",
-      "gateway_ip": "172.30.12.254"
-    },
-    {
-      "original_ip": "10.10.10.30",
-      "original_role": "internal_host",
-      "sim_type": "internal",
-      "zone": "A",
-      "service_name": "A_internal_host_03",
-      "simulated_ip": "172.30.13.13",
-      "gateway_ip": "172.30.13.254"
-    },
-    {
-      "original_ip": "192.168.88.52",
-      "original_role": "internal_host",
-      "sim_type": "internal",
-      "zone": "A",
-      "service_name": "A_internal_host_04",
-      "simulated_ip": "172.30.14.14",
-      "gateway_ip": "172.30.14.254"
-    },
-    {
-      "original_ip": "192.168.88.61",
-      "original_role": "internal_host",
-      "sim_type": "internal",
-      "zone": "A",
-      "service_name": "A_internal_host_05",
-      "simulated_ip": "172.30.15.15",
-      "gateway_ip": "172.30.15.254"
-    },
-    {
-      "original_ip": "192.168.89.2",
-      "original_role": "internal_host",
-      "sim_type": "internal",
-      "zone": "A",
-      "service_name": "A_internal_host_06",
-      "simulated_ip": "172.30.16.16",
-      "gateway_ip": "172.30.16.254"
-    },
-    {
-      "original_ip": "17.253.34.253",
-      "original_role": "external_host",
-      "sim_type": "external",
-      "zone": "B",
-      "service_name": "B_external_host_01",
-      "simulated_ip": "172.31.11.11",
-      "gateway_ip": "172.31.11.254"
-    },
-    {
-      "original_ip": "192.195.142.13",
-      "original_role": "external_host",
-      "sim_type": "external",
-      "zone": "C",
-      "service_name": "C_external_host_01",
-      "simulated_ip": "172.32.11.11",
-      "gateway_ip": "172.32.11.254"
-    },
-    {
-      "original_ip": "21.2.2.2",
-      "original_role": "external_host",
-      "sim_type": "external",
-      "zone": "D",
-      "service_name": "D_external_host_01",
-      "simulated_ip": "172.33.11.11",
-      "gateway_ip": "172.33.11.254"
-    },
-    {
-      "original_ip": "192.168.88.1",
+      "original_ip": "10.10.0.1",
       "original_role": "gateway_or_dns",
       "sim_type": "gateway",
       "zone": "A",
@@ -147,13 +55,13 @@
       "gateway_ip": ""
     },
     {
-      "original_ip": "192.168.89.1",
-      "original_role": "gateway_or_dns",
-      "sim_type": "gateway",
+      "original_ip": "8.8.4.4",
+      "original_role": "external_dns",
+      "sim_type": "infra_dns",
       "zone": "A",
-      "service_name": "gw",
-      "simulated_ip": "172.30.10.254",
-      "gateway_ip": ""
+      "service_name": "dns",
+      "simulated_ip": "172.30.10.53",
+      "gateway_ip": "172.30.10.254"
     },
     {
       "original_ip": "8.8.8.8",
@@ -165,168 +73,112 @@
       "gateway_ip": "172.30.10.254"
     }
   ],
-  "ignored_hosts": [],
+  "ignored_hosts": [
+    {
+      "original_ip": "10.10.0.255",
+      "original_role": "broadcast",
+      "sim_type": "ignore"
+    },
+    {
+      "original_ip": "224.0.0.251",
+      "original_role": "multicast",
+      "sim_type": "ignore"
+    },
+    {
+      "original_ip": "224.0.0.252",
+      "original_role": "multicast",
+      "sim_type": "ignore"
+    },
+    {
+      "original_ip": "239.255.255.250",
+      "original_role": "multicast",
+      "sim_type": "ignore"
+    }
+  ],
   "edges": [
     {
-      "src_original_ip": "10.10.10.10",
-      "dst_original_ip": "10.10.10.20",
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "10.10.0.1",
       "src_service": "A_internal_host_01",
-      "dst_service": "A_internal_host_02",
-      "src_simulated_ip": "172.30.11.11",
-      "dst_simulated_ip": "172.30.12.12",
-      "packet_count": 51470,
-      "protocols": [
-        "S7COMM",
-        "TCP"
-      ]
-    },
-    {
-      "src_original_ip": "10.10.10.10",
-      "dst_original_ip": "10.10.10.30",
-      "src_service": "A_internal_host_01",
-      "dst_service": "A_internal_host_03",
-      "src_simulated_ip": "172.30.11.11",
-      "dst_simulated_ip": "172.30.13.13",
-      "packet_count": 33135,
-      "protocols": [
-        "S7COMM",
-        "TCP",
-        "TPKT"
-      ]
-    },
-    {
-      "src_original_ip": "10.10.10.20",
-      "dst_original_ip": "10.10.10.10",
-      "src_service": "A_internal_host_02",
-      "dst_service": "A_internal_host_01",
-      "src_simulated_ip": "172.30.12.12",
-      "dst_simulated_ip": "172.30.11.11",
-      "packet_count": 94859,
-      "protocols": [
-        "S7COMM",
-        "TCP"
-      ]
-    },
-    {
-      "src_original_ip": "10.10.10.30",
-      "dst_original_ip": "10.10.10.10",
-      "src_service": "A_internal_host_03",
-      "dst_service": "A_internal_host_01",
-      "src_simulated_ip": "172.30.13.13",
-      "dst_simulated_ip": "172.30.11.11",
-      "packet_count": 29476,
-      "protocols": [
-        "S7COMM",
-        "TCP"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.88.1",
-      "dst_original_ip": "192.168.88.52",
-      "src_service": "gw",
-      "dst_service": "A_internal_host_04",
-      "src_simulated_ip": "172.30.10.254",
-      "dst_simulated_ip": "172.30.14.14",
-      "packet_count": 77,
-      "protocols": [
-        "DNS"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.88.1",
-      "dst_original_ip": "192.168.88.61",
-      "src_service": "gw",
-      "dst_service": "A_internal_host_05",
-      "src_simulated_ip": "172.30.10.254",
-      "dst_simulated_ip": "172.30.15.15",
-      "packet_count": 12330,
-      "protocols": [
-        "DNS"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.88.52",
-      "dst_original_ip": "192.168.88.1",
-      "src_service": "A_internal_host_04",
       "dst_service": "gw",
-      "src_simulated_ip": "172.30.14.14",
+      "src_simulated_ip": "172.30.11.11",
       "dst_simulated_ip": "172.30.10.254",
-      "packet_count": 109,
+      "packet_count": 113,
+      "protocols": [
+        "DNS"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "10.10.0.255",
+      "src_service": "A_internal_host_01",
+      "dst_service": null,
+      "src_simulated_ip": "172.30.11.11",
+      "dst_simulated_ip": null,
+      "packet_count": 39,
+      "protocols": [
+        "NBNS"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "224.0.0.251",
+      "src_service": "A_internal_host_01",
+      "dst_service": null,
+      "src_simulated_ip": "172.30.11.11",
+      "dst_simulated_ip": null,
+      "packet_count": 34,
+      "protocols": [
+        "MDNS"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "224.0.0.252",
+      "src_service": "A_internal_host_01",
+      "dst_service": null,
+      "src_simulated_ip": "172.30.11.11",
+      "dst_simulated_ip": null,
+      "packet_count": 34,
+      "protocols": [
+        "LLMNR"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "239.255.255.250",
+      "src_service": "A_internal_host_01",
+      "dst_service": null,
+      "src_simulated_ip": "172.30.11.11",
+      "dst_simulated_ip": null,
+      "packet_count": 8,
+      "protocols": [
+        "SSDP"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "8.8.4.4",
+      "src_service": "A_internal_host_01",
+      "dst_service": "dns",
+      "src_simulated_ip": "172.30.11.11",
+      "dst_simulated_ip": "172.30.10.53",
+      "packet_count": 1,
+      "protocols": [
+        "DNS"
+      ]
+    },
+    {
+      "src_original_ip": "10.10.0.4",
+      "dst_original_ip": "8.8.8.8",
+      "src_service": "A_internal_host_01",
+      "dst_service": "dns",
+      "src_simulated_ip": "172.30.11.11",
+      "dst_simulated_ip": "172.30.10.53",
+      "packet_count": 90,
       "protocols": [
         "DNS",
-        "UDP"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.88.52",
-      "dst_original_ip": "192.195.142.13",
-      "src_service": "A_internal_host_04",
-      "dst_service": "C_external_host_01",
-      "src_simulated_ip": "172.30.14.14",
-      "dst_simulated_ip": "172.32.11.11",
-      "packet_count": 5,
-      "protocols": [
-        "OpenVPN"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.88.61",
-      "dst_original_ip": "192.168.88.1",
-      "src_service": "A_internal_host_05",
-      "dst_service": "gw",
-      "src_simulated_ip": "172.30.15.15",
-      "dst_simulated_ip": "172.30.10.254",
-      "packet_count": 12331,
-      "protocols": [
-        "DNS"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.89.1",
-      "dst_original_ip": "192.168.89.2",
-      "src_service": "gw",
-      "dst_service": "A_internal_host_06",
-      "src_simulated_ip": "172.30.10.254",
-      "dst_simulated_ip": "172.30.16.16",
-      "packet_count": 2735,
-      "protocols": [
-        "ICMP"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.89.2",
-      "dst_original_ip": "17.253.34.253",
-      "src_service": "A_internal_host_06",
-      "dst_service": "B_external_host_01",
-      "src_simulated_ip": "172.30.16.16",
-      "dst_simulated_ip": "172.31.11.11",
-      "packet_count": 4,
-      "protocols": [
-        "NTP"
-      ]
-    },
-    {
-      "src_original_ip": "192.168.89.2",
-      "dst_original_ip": "8.8.8.8",
-      "src_service": "A_internal_host_06",
-      "dst_service": "dns",
-      "src_simulated_ip": "172.30.16.16",
-      "dst_simulated_ip": "172.30.10.53",
-      "packet_count": 2731,
-      "protocols": [
-        "DNS"
-      ]
-    },
-    {
-      "src_original_ip": "21.2.2.2",
-      "dst_original_ip": "192.168.88.52",
-      "src_service": "D_external_host_01",
-      "dst_service": "A_internal_host_04",
-      "src_simulated_ip": "172.33.11.11",
-      "dst_simulated_ip": "172.30.14.14",
-      "packet_count": 5,
-      "protocols": [
-        "ICMP"
+        "TCP"
       ]
     }
   ]

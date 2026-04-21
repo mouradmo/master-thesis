@@ -117,3 +117,9 @@ docker compose --profile capture up -d
 docker compose stop capture
 ```
 
+python3 replay_traffic.py \
+  --pcap input.pcap \
+  --topology simulated_topology.json \
+  --multiplier 5.0 \
+  --attack-class botnet
+

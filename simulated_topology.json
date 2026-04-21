@@ -1,39 +1,15 @@
 {
   "pcap_file": "57627_dump.pcap",
-  "zones": 1,
+  "zones": 3,
   "zone_labels": [
-    "A"
+    "A",
+    "B",
+    "C"
   ],
   "hosts_per_zone": [
+    1,
+    1,
     1
-  ],
-  "dns_names": [
-    "settings-win.data.microsoft.com",
-    "ocos-office365-s2s.msedge.net",
-    "config.edge.skype.com",
-    "client-office365-tas.msedge.net",
-    "fs.microsoft.com",
-    "wpad.local",
-    "wpad",
-    "clients2.google.com",
-    "lnk.ua",
-    "accounts.google.com",
-    "pastefy.app",
-    "clientservices.googleapis.com",
-    "dns.msftncsi.com",
-    "dns.google",
-    "lkszditpm.local",
-    "lkszditpm",
-    "gfrivpaiqg.local",
-    "gfrivpaiqg",
-    "isqrcsnilhopm.local",
-    "isqrcsnilhopm",
-    "google.com",
-    "_googlecast._tcp.local",
-    "ssl.gstatic.com",
-    "www.gstatic.com",
-    "beacons.gvt2.com",
-    "beacons.gcp.gvt2.com"
   ],
   "mapping": [
     {
@@ -46,6 +22,24 @@
       "gateway_ip": "172.30.11.254"
     },
     {
+      "original_ip": "8.8.4.4",
+      "original_role": "external_host",
+      "sim_type": "external",
+      "zone": "B",
+      "service_name": "B_external_host_01",
+      "simulated_ip": "172.31.11.11",
+      "gateway_ip": "172.31.11.254"
+    },
+    {
+      "original_ip": "8.8.8.8",
+      "original_role": "external_host",
+      "sim_type": "external",
+      "zone": "C",
+      "service_name": "C_external_host_01",
+      "simulated_ip": "172.32.11.11",
+      "gateway_ip": "172.32.11.254"
+    },
+    {
       "original_ip": "10.10.0.1",
       "original_role": "gateway_or_dns",
       "sim_type": "gateway",
@@ -53,24 +47,6 @@
       "service_name": "gw",
       "simulated_ip": "172.30.10.254",
       "gateway_ip": ""
-    },
-    {
-      "original_ip": "8.8.4.4",
-      "original_role": "external_dns",
-      "sim_type": "infra_dns",
-      "zone": "A",
-      "service_name": "dns",
-      "simulated_ip": "172.30.10.53",
-      "gateway_ip": "172.30.10.254"
-    },
-    {
-      "original_ip": "8.8.8.8",
-      "original_role": "external_dns",
-      "sim_type": "infra_dns",
-      "zone": "A",
-      "service_name": "dns",
-      "simulated_ip": "172.30.10.53",
-      "gateway_ip": "172.30.10.254"
     }
   ],
   "ignored_hosts": [
@@ -160,9 +136,9 @@
       "src_original_ip": "10.10.0.4",
       "dst_original_ip": "8.8.4.4",
       "src_service": "A_internal_host_01",
-      "dst_service": "dns",
+      "dst_service": "B_external_host_01",
       "src_simulated_ip": "172.30.11.11",
-      "dst_simulated_ip": "172.30.10.53",
+      "dst_simulated_ip": "172.31.11.11",
       "packet_count": 1,
       "protocols": [
         "DNS"
@@ -172,9 +148,9 @@
       "src_original_ip": "10.10.0.4",
       "dst_original_ip": "8.8.8.8",
       "src_service": "A_internal_host_01",
-      "dst_service": "dns",
+      "dst_service": "C_external_host_01",
       "src_simulated_ip": "172.30.11.11",
-      "dst_simulated_ip": "172.30.10.53",
+      "dst_simulated_ip": "172.32.11.11",
       "packet_count": 90,
       "protocols": [
         "DNS",

@@ -5,7 +5,7 @@ import sys
 from collections import defaultdict
 from ipaddress import ip_address, ip_network
 
-PCAP = sys.argv[1] if len(sys.argv) > 1 else "54831_dump.pcap"
+PCAP = sys.argv[1]
 
 PRIVATE_NETWORKS = [
     ip_network("10.0.0.0/8"),
@@ -158,7 +158,7 @@ def infer_role(ip, dns_server_ips):
 
 
 def classify_for_sim(role, ip):
-    # Important: do not map broadcast/multicast to fake hosts
+    # do not map broadcast/multicast to fake hosts
     if role == "broadcast":
         return "ignore"
     if role == "multicast":
@@ -346,11 +346,10 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
         "zones": len(zone_labels),
         "zone_labels": zone_labels,
         "hosts_per_zone": hosts_per_zone,
-        "dns_names": dns_names,
+        # "dns_names": dns_names,
         "mapping": mapping_hosts,
         "ignored_hosts": ignored_hosts,
         "edges": filtered_edges,
-        
     }
 
     with open("simulated_topology.json", "w") as f:
@@ -360,15 +359,19 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
     print(f"zones={simulated_topology['zones']}")
     print("zone_labels=" + ",".join(simulated_topology["zone_labels"]))
     print("hosts_per_zone=" + ",".join(map(str, simulated_topology["hosts_per_zone"])))
-    print(f"dns_names={len(simulated_topology['dns_names'])}")
+    # print(f"dns_names={len(simulated_topology['dns_names'])}")
     print(f"mapping_entries={len(simulated_topology['mapping'])}")
     print(f"ignored_hosts={len(simulated_topology['ignored_hosts'])}")
 
 
 def main():
     hosts, edges = extract_packets()
-    dns_names = extract_dns_names()
-    dns_server_ips = extract_dns_server_ips()
+
+    # dns_names = extract_dns_names()
+    # dns_server_ips = extract_dns_server_ips()
+
+    dns_names = []
+    dns_server_ips = set()
 
     host_rows = []
     for ip in sorted(hosts):
@@ -390,16 +393,16 @@ def main():
         "pcap_file": PCAP,
         "hosts": host_rows,
         "edges": edge_rows,
-        "dns_names": dns_names,
-        "dns_server_ips": sorted(dns_server_ips),
+        # "dns_names": dns_names,
+        # "dns_server_ips": sorted(dns_server_ips),
     }
 
     with open("topology.json", "w") as f:
         json.dump(topology, f, indent=2)
 
     print("Wrote topology.json")
-    print(f"dns_names={len(dns_names)}")
-    print(f"dns_server_ips={len(dns_server_ips)}")
+    # print(f"dns_names={len(dns_names)}")
+    # print(f"dns_server_ips={len(dns_server_ips)}")
 
     build_simulated_topology(host_rows, edge_rows, dns_names)
 

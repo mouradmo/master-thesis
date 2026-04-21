@@ -14,7 +14,8 @@ GW_HOST_OCTET4 = 254
 A_OCTET2_BASE = 30
 A_SERVER_OCTET3 = 10
 HOST_OCTET3_START = 11  # host_01 -> 11 (=> .11.11), host_02 -> 12, ...
-CORE_DNS_IP = "172.30.10.53"
+
+# CORE_DNS_IP = "172.30.10.53"
 
 # Linux image for external hosts
 EXTERNAL_IMAGE_NAME = "nicolaka/netshoot:latest"
@@ -79,34 +80,33 @@ def net_name_external(zone: str, i: int) -> str:
     return f"{zone}_external_host_{i:02d}_net"
 
 
-def load_emulated_dns_names(topo: Dict[str, Any]) -> List[str]:
-    names = topo.get("dns_names", [])
-    if not isinstance(names, list):
-        return []
-
-    cleaned: List[str] = []
-    seen = set()
-
-    for name in names:
-        if not isinstance(name, str):
-            continue
-
-        name = name.strip().lower().rstrip(".")
-        if not name:
-            continue
-
-        if name not in seen:
-            seen.add(name)
-            cleaned.append(name)
-
-    return cleaned
+# def load_emulated_dns_names(topo: Dict[str, Any]) -> List[str]:
+#     names = topo.get("dns_names", [])
+#     if not isinstance(names, list):
+#         return []
+#
+#     cleaned: List[str] = []
+#     seen = set()
+#
+#     for name in names:
+#         if not isinstance(name, str):
+#             continue
+#
+#         name = name.strip().lower().rstrip(".")
+#         if not name:
+#             continue
+#
+#         if name not in seen:
+#             seen.add(name)
+#             cleaned.append(name)
+#
+#     return cleaned
 
 
 def make_compose(
     num_zones: int,
     hosts_per_zone: List[int],
     pcap_filename: str,
-    dns_names: List[str] | None = None,
 ) -> Dict[str, Any]:
     zones = zone_letters(num_zones)
 
@@ -169,153 +169,153 @@ def make_compose(
     server_ip = f"172.{a_o2}.{A_SERVER_OCTET3}.{A_SERVER_OCTET3}"  # 172.30.10.10
     server_gw = gw_ip(a_o2, A_SERVER_OCTET3)
 
-    base_dns_names = [
-        "server.local",
-        "c2.local",
-        "api.ipify.org",
-        "ipify.org",
-        "github.com",
-    ]
+    # base_dns_names = [
+    #     "server.local",
+    #     "c2.local",
+    #     "api.ipify.org",
+    #     "ipify.org",
+    #     "github.com",
+    # ]
+    #
+    # all_dns_names: List[str] = []
+    # seen_dns = set()
+    #
+    # for name in base_dns_names + (dns_names or []):
+    #     name = name.strip().lower().rstrip(".")
+    #     if not name:
+    #         continue
+    #     if name not in seen_dns:
+    #         seen_dns.add(name)
+    #         all_dns_names.append(name)
+    #
+    # host_lines = "".join(f"        {server_ip} {name}\n" for name in all_dns_names)
+    #
+    # corefile_content = (
+    #     ".:53 {\n"
+    #     "    hosts {\n"
+    #     f"{host_lines}"
+    #     "        fallthrough\n"
+    #     "    }\n"
+    #     "    log\n"
+    #     "    errors\n"
+    #     "}\n"
+    # )
+    # Path("Corefile").write_text(corefile_content, encoding="utf-8")
 
-    all_dns_names: List[str] = []
-    seen_dns = set()
+    # services["server"] = {
+    #     "image": "nginx:alpine",
+    #     "container_name": "master-thesis-server",
+    #     "networks": {net_name_a_server(): {"ipv4_address": server_ip}},
+    #     "command": (
+    #         "sh -c \""
+    #         "cat > /etc/nginx/conf.d/default.conf <<'EOF'\n"
+    #         "server {\n"
+    #         "  listen 80;\n"
+    #         "  server_name server.local;\n"
+    #         "\n"
+    #         "  location = / {\n"
+    #         "    default_type text/html;\n"
+    #         "    return 200 '<html><body><h1>Internal test server</h1></body></html>\\\\n';\n"
+    #         "  }\n"
+    #         "\n"
+    #         "  location = /health {\n"
+    #         "    default_type text/plain;\n"
+    #         "    return 200 'healthy\\\\n';\n"
+    #         "  }\n"
+    #         "\n"
+    #         "  location = /index.html {\n"
+    #         "    default_type text/html;\n"
+    #         "    return 200 '<html><body><p>index page</p></body></html>\\\\n';\n"
+    #         "  }\n"
+    #         "}\n"
+    #         "\n"
+    #         "server {\n"
+    #         "  listen 80;\n"
+    #         "  server_name c2.local;\n"
+    #         "\n"
+    #         "  location = / {\n"
+    #         "    default_type application/json;\n"
+    #         "    return 200 '{\\\"status\\\":\\\"online\\\"}\\\\n';\n"
+    #         "  }\n"
+    #         "\n"
+    #         "  location = /api/beacon {\n"
+    #         "    default_type application/json;\n"
+    #         "    return 200 '{\\\"cmd\\\":\\\"sleep\\\",\\\"seconds\\\":5}\\\\n';\n"
+    #         "  }\n"
+    #         "\n"
+    #         "  location = /api/task {\n"
+    #         "    default_type application/json;\n"
+    #         "    return 200 '{\\\"task\\\":\\\"noop\\\"}\\\\n';\n"
+    #         "  }\n"
+    #         "}\n"
+    #         "\n"
+    #         "server {\n"
+    #         "  listen 80;\n"
+    #         "  server_name api.ipify.org ipify.org;\n"
+    #         "\n"
+    #         "  location = / {\n"
+    #         "    default_type text/plain;\n"
+    #         "    return 200 '203.0.113.10\\\\n';\n"
+    #         "  }\n"
+    #         "}\n"
+    #         "\n"
+    #         "server {\n"
+    #         "  listen 80 default_server;\n"
+    #         "  server_name _;\n"
+    #         "\n"
+    #         "  location = / {\n"
+    #         "    default_type text/html;\n"
+    #         "    return 200 '<html><body><h1>Generic web reply</h1></body></html>\\\\n';\n"
+    #         "  }\n"
+    #         "\n"
+    #         "  location = /robots.txt {\n"
+    #         "    default_type text/plain;\n"
+    #         "    return 200 'User-agent: *\\\\nDisallow:\\\\n';\n"
+    #         "  }\n"
+    #         "}\n"
+    #         "EOF\n"
+    #         "nginx -g 'daemon off;'\n"
+    #         "\""
+    #     ),
+    # }
 
-    for name in base_dns_names + (dns_names or []):
-        name = name.strip().lower().rstrip(".")
-        if not name:
-            continue
-        if name not in seen_dns:
-            seen_dns.add(name)
-            all_dns_names.append(name)
+    # services["server_route"] = {
+    #     "image": "nicolaka/netshoot:latest",
+    #     "container_name": "master-thesis-server-route",
+    #     "network_mode": "service:server",
+    #     "depends_on": ["server", "gw"],
+    #     "cap_add": ["NET_ADMIN"],
+    #     "command": (
+    #         "sh -c \""
+    #         "ip route del default 2>/dev/null || true; "
+    #         f"ip route add default via {server_gw}; "
+    #         "sleep infinity"
+    #         "\""
+    #     ),
+    # }
 
-    host_lines = "".join(f"        {server_ip} {name}\n" for name in all_dns_names)
+    # services["dns"] = {
+    #     "image": "coredns/coredns:latest",
+    #     "container_name": "master-thesis-dns",
+    #     "networks": {net_name_a_server(): {"ipv4_address": CORE_DNS_IP}},
+    #     "volumes": ["./Corefile:/Corefile:ro"],
+    #     "command": ["-conf", "/Corefile"],
+    # }
 
-    corefile_content = (
-        ".:53 {\n"
-        "    hosts {\n"
-        f"{host_lines}"
-        "        fallthrough\n"
-        "    }\n"
-        "    log\n"
-        "    errors\n"
-        "}\n"
-    )
-    Path("Corefile").write_text(corefile_content, encoding="utf-8")
-
-    services["server"] = {
-        "image": "nginx:alpine",
-        "container_name": "master-thesis-server",
-        "networks": {net_name_a_server(): {"ipv4_address": server_ip}},
-        "command": (
-            "sh -c \""
-            "cat > /etc/nginx/conf.d/default.conf <<'EOF'\n"
-            "server {\n"
-            "  listen 80;\n"
-            "  server_name server.local;\n"
-            "\n"
-            "  location = / {\n"
-            "    default_type text/html;\n"
-            "    return 200 '<html><body><h1>Internal test server</h1></body></html>\\\\n';\n"
-            "  }\n"
-            "\n"
-            "  location = /health {\n"
-            "    default_type text/plain;\n"
-            "    return 200 'healthy\\\\n';\n"
-            "  }\n"
-            "\n"
-            "  location = /index.html {\n"
-            "    default_type text/html;\n"
-            "    return 200 '<html><body><p>index page</p></body></html>\\\\n';\n"
-            "  }\n"
-            "}\n"
-            "\n"
-            "server {\n"
-            "  listen 80;\n"
-            "  server_name c2.local;\n"
-            "\n"
-            "  location = / {\n"
-            "    default_type application/json;\n"
-            "    return 200 '{\\\"status\\\":\\\"online\\\"}\\\\n';\n"
-            "  }\n"
-            "\n"
-            "  location = /api/beacon {\n"
-            "    default_type application/json;\n"
-            "    return 200 '{\\\"cmd\\\":\\\"sleep\\\",\\\"seconds\\\":5}\\\\n';\n"
-            "  }\n"
-            "\n"
-            "  location = /api/task {\n"
-            "    default_type application/json;\n"
-            "    return 200 '{\\\"task\\\":\\\"noop\\\"}\\\\n';\n"
-            "  }\n"
-            "}\n"
-            "\n"
-            "server {\n"
-            "  listen 80;\n"
-            "  server_name api.ipify.org ipify.org;\n"
-            "\n"
-            "  location = / {\n"
-            "    default_type text/plain;\n"
-            "    return 200 '203.0.113.10\\\\n';\n"
-            "  }\n"
-            "}\n"
-            "\n"
-            "server {\n"
-            "  listen 80 default_server;\n"
-            "  server_name _;\n"
-            "\n"
-            "  location = / {\n"
-            "    default_type text/html;\n"
-            "    return 200 '<html><body><h1>Generic web reply</h1></body></html>\\\\n';\n"
-            "  }\n"
-            "\n"
-            "  location = /robots.txt {\n"
-            "    default_type text/plain;\n"
-            "    return 200 'User-agent: *\\\\nDisallow:\\\\n';\n"
-            "  }\n"
-            "}\n"
-            "EOF\n"
-            "nginx -g 'daemon off;'\n"
-            "\""
-        ),
-    }
-
-    services["server_route"] = {
-        "image": "nicolaka/netshoot:latest",
-        "container_name": "master-thesis-server-route",
-        "network_mode": "service:server",
-        "depends_on": ["server", "gw"],
-        "cap_add": ["NET_ADMIN"],
-        "command": (
-            "sh -c \""
-            "ip route del default 2>/dev/null || true; "
-            f"ip route add default via {server_gw}; "
-            "sleep infinity"
-            "\""
-        ),
-    }
-
-    services["dns"] = {
-        "image": "coredns/coredns:latest",
-        "container_name": "master-thesis-dns",
-        "networks": {net_name_a_server(): {"ipv4_address": CORE_DNS_IP}},
-        "volumes": ["./Corefile:/Corefile:ro"],
-        "command": ["-conf", "/Corefile"],
-    }
-
-    services["dns_route"] = {
-        "image": "nicolaka/netshoot:latest",
-        "container_name": "master-thesis-dns-route",
-        "network_mode": "service:dns",
-        "depends_on": ["dns", "gw"],
-        "cap_add": ["NET_ADMIN"],
-        "command": (
-            "sh -c \""
-            "ip route del default 2>/dev/null || true; "
-            "ip route add default via 172.30.10.254; "
-            "sleep infinity"
-            "\""
-        ),
-    }
+    # services["dns_route"] = {
+    #     "image": "nicolaka/netshoot:latest",
+    #     "container_name": "master-thesis-dns-route",
+    #     "network_mode": "service:dns",
+    #     "depends_on": ["dns", "gw"],
+    #     "cap_add": ["NET_ADMIN"],
+    #     "command": (
+    #         "sh -c \""
+    #         "ip route del default 2>/dev/null || true; "
+    #         "ip route add default via 172.30.10.254; "
+    #         "sleep infinity"
+    #         "\""
+    #     ),
+    # }
 
     for zi, z in enumerate(zones):
         o2 = A_OCTET2_BASE + zi
@@ -333,8 +333,8 @@ def make_compose(
                     "image": "curlimages/curl:latest",
                     "container_name": f"master-thesis-{name}",
                     "command": "sleep infinity",
-                    "dns": [CORE_DNS_IP],
-                    "dns_search": ["local"],
+                    # "dns": [CORE_DNS_IP],
+                    # "dns_search": ["local"],
                     "networks": {net: {"ipv4_address": ip_addr}},
                 }
 
@@ -364,8 +364,8 @@ def make_compose(
                     "image": EXTERNAL_IMAGE_NAME,
                     "container_name": f"master-thesis-{name}",
                     "command": "sleep infinity",
-                    "dns": [CORE_DNS_IP],
-                    "dns_search": ["local"],
+                    # "dns": [CORE_DNS_IP],
+                    # "dns_search": ["local"],
                     "cap_add": ["NET_ADMIN", "NET_RAW"],
                     "networks": {net: {"ipv4_address": ip_addr}},
                 }
@@ -388,18 +388,18 @@ def make_compose(
     net_filter = " or ".join([f"net {s}" for s in all_subnets]) if all_subnets else "ip"
 
     services["capture"] = {
-      "image": "nicolaka/netshoot:latest",
-      "container_name": "master-thesis-capture",
-      "profiles": ["capture"],
-      "network_mode": "service:gw",
-      "depends_on": ["gw"],
-      "cap_add": ["NET_ADMIN", "NET_RAW"],
-      "volumes": ["./:/data"],
-      "command": (
-        "sh -c \""
-        f"tcpdump -U -i any -nn -s 0 '({net_filter}) and not arp' "
-        f"-w /data/{pcap_filename}"
-        "\""
+        "image": "nicolaka/netshoot:latest",
+        "container_name": "master-thesis-capture",
+        "profiles": ["capture"],
+        "network_mode": "service:gw",
+        "depends_on": ["gw"],
+        "cap_add": ["NET_ADMIN", "NET_RAW"],
+        "volumes": ["./:/data"],
+        "command": (
+            "sh -c \""
+            f"tcpdump -U -i any -nn -s 0 '({net_filter}) and not arp' "
+            f"-w /data/{pcap_filename}"
+            "\""
         ),
     }
 
@@ -425,7 +425,7 @@ def main() -> None:
         with open(args.topology, "r", encoding="utf-8") as f:
             topo = json.load(f)
 
-        dns_names = load_emulated_dns_names(topo)
+        # dns_names = load_emulated_dns_names(topo)
 
         if "zones" not in topo or "hosts_per_zone" not in topo:
             ap.error("--topology file must contain 'zones' and 'hosts_per_zone'")
@@ -452,13 +452,12 @@ def main() -> None:
 
         zones = args.zones
         hosts_per_zone = parse_hosts_per_zone(args.hosts_per_zone, zones)
-        dns_names = []
+        # dns_names = []
 
     compose = make_compose(
         num_zones=zones,
         hosts_per_zone=hosts_per_zone,
         pcap_filename=args.pcap,
-        dns_names=dns_names,
     )
 
     Path(args.out).write_text(

@@ -158,7 +158,7 @@ def infer_role(ip, dns_server_ips):
 
 
 def classify_for_sim(role, ip):
-    # do not map broadcast/multicast to fake hosts
+    # Important: do not map broadcast/multicast to fake hosts
     if role == "broadcast":
         return "ignore"
     if role == "multicast":

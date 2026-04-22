@@ -81,6 +81,15 @@ def extract_dns_names():
 
 
 def extract_dns_server_ips():
+    """
+    DNS servers are identified from actual DNS traffic:
+    - request destination IPs
+    - response source IPs
+
+    This returns both internal and external DNS IPs.
+    External DNS IPs stay external hosts later; only internal DNS gets
+    the dedicated internal DNS mapping.
+    """
     dns_ips = set()
 
     for flt, field in [
@@ -103,19 +112,28 @@ def infer_role(ip, dns_server_ips):
         return "multicast"
     if ip.endswith(".255"):
         return "broadcast"
+
+    # Internal DNS gets its own dedicated role.
+    if ip in dns_server_ips and is_private_ip(ip):
+        return "internal_dns"
+
+    # External DNS should NOT be special; keep it as an external host.
     if ip in dns_server_ips and not is_private_ip(ip):
-        return "external_dns"
-    if ip.endswith(".1"):
-        return "gateway_or_dns"
+        return "external_host"
+
+    # Gateway heuristic remains separate.
+    if ip.endswith(".1") and is_private_ip(ip):
+        return "gateway"
+
     return "internal_host" if is_private_ip(ip) else "external_host"
 
 
 def classify_for_sim(role, ip):
     if role in {"broadcast", "multicast"}:
         return "ignore"
-    if role == "gateway_or_dns":
+    if role == "gateway":
         return "gateway"
-    if role == "external_dns":
+    if role == "internal_dns":
         return "infra_dns"
     return "internal" if is_private_ip(ip) else "external"
 
@@ -205,18 +223,24 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
     external_assigned, external_zone_count_map = assign_external_hosts(grouped["external"])
     mapping.extend(external_assigned)
 
-    for host in sorted(grouped["gateway"], key=lambda x: x["original_ip"]):
+    # Keep only one mapped gateway service.
+    if grouped["gateway"]:
         mapping.append({
-            **host,
+            "original_ip": grouped["gateway"][0]["original_ip"],
+            "original_role": "gateway",
+            "sim_type": "gateway",
             "zone": "A",
             "service_name": "gw",
             "simulated_ip": build_gateway_sim_ip(),
             "gateway_ip": "",
         })
 
-    for host in sorted(grouped["infra_dns"], key=lambda x: x["original_ip"]):
+    # Keep only one mapped internal DNS service.
+    if grouped["infra_dns"]:
         mapping.append({
-            **host,
+            "original_ip": grouped["infra_dns"][0]["original_ip"],
+            "original_role": "internal_dns",
+            "sim_type": "infra_dns",
             "zone": "A",
             "service_name": "dns",
             "simulated_ip": INTERNAL_DNS_IP,
@@ -253,6 +277,7 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
         "mapping": mapping,
         "ignored_hosts": grouped["ignore"],
         "edges": filtered_edges,
+        "dns_names": dns_names,
     }
 
     with open("simulated_topology.json", "w") as f:
@@ -269,11 +294,8 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
 def main():
     hosts, edges = extract_packets()
 
-    # Enable these later if needed
-    # dns_names = extract_dns_names()
-    # dns_server_ips = extract_dns_server_ips()
-    dns_names = []
-    dns_server_ips = set()
+    dns_names = extract_dns_names()
+    dns_server_ips = extract_dns_server_ips()
 
     host_rows = [{"ip": ip, "role": infer_role(ip, dns_server_ips)} for ip in sorted(hosts)]
 
@@ -288,6 +310,8 @@ def main():
         "pcap_file": PCAP,
         "hosts": host_rows,
         "edges": edge_rows,
+        "dns_names": dns_names,
+        "dns_server_ips": sorted(dns_server_ips),
     }
 
     with open("topology.json", "w") as f:

@@ -13,8 +13,8 @@ GW_HOST_OCTET4 = 254
 A_OCTET2_BASE = 30
 A_SERVER_OCTET3 = 10
 HOST_OCTET3_START = 11  # host_01 -> 11 (=> .11.11), host_02 -> 12, ...
-
-# CORE_DNS_IP = "172.30.10.53"
+INTERNAL_DNS_IP = "172.30.10.53"
+INTERNAL_DNS_GW = "172.30.10.254"
 
 # Linux image for external hosts
 EXTERNAL_IMAGE_NAME = "nicolaka/netshoot:latest"
@@ -110,7 +110,7 @@ def make_host_services(name: str, net: str, ip_addr: str, gw_addr: str, image: s
         "image": image,
         "container_name": f"master-thesis-{name}",
         "command": "sleep infinity",
-        # "dns": [CORE_DNS_IP],
+        # "dns": [INTERNAL_DNS_IP],
         # "dns_search": ["local"],
         "networks": {net: {"ipv4_address": ip_addr}},
     }
@@ -171,6 +171,29 @@ def make_compose(num_zones: int, hosts_per_zone: List[int], pcap_filename: str) 
             "echo 'GW ready'; "
             "sleep infinity"
             "\""
+        ),
+    }
+
+    services["dns"] = {
+      "image": ROUTE_IMAGE,
+      "container_name": "master-thesis-dns",
+      "cap_add": ["NET_ADMIN", "NET_RAW"],
+      "command": "sleep infinity",
+       "networks": {net_name_a_server(): {"ipv4_address": INTERNAL_DNS_IP}},
+    }
+
+    services["dns_route"] = {
+    "image": ROUTE_IMAGE,
+    "container_name": "master-thesis-dns-route",
+    "network_mode": "service:dns",
+    "depends_on": ["dns", "gw"],
+    "cap_add": ["NET_ADMIN"],
+    "command": (
+        "sh -c \""
+        "ip route del default 2>/dev/null || true; "
+        f"ip route add default via {INTERNAL_DNS_GW}; "
+        "sleep infinity"
+        "\""
         ),
     }
 

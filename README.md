@@ -96,12 +96,7 @@ chmod +x set_delay.sh
 ./set_delay.sh list
 
 ```
-Run run_malware.sh
 
-```bash
-chmod +x run_malware.sh
-./run_malware.sh <container_name> <binary_path>
-```
 ```bash
 zeek -b -C -r gateway.pcap base/protocols/conn LogAscii::use_json=T
 ```
@@ -117,9 +112,13 @@ docker compose --profile capture up -d
 docker compose stop capture
 ```
 
-python3 replay_traffic.py \
-  --pcap input.pcap \
-  --topology simulated_topology.json \
-  --multiplier 5.0 \
-  --attack-class botnet
+Extract topology
+```bash
+python3 extract_topology.py 57627_dump.pcap
+```
+
+Run replay traffic
+```bash
+python3 replay_traffic.py --pcap 57627_dump.pcap --multiplier 1.0 --attack_class name
+```
 

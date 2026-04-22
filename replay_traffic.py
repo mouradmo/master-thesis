@@ -278,7 +278,7 @@ def make_ground_truth_row(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcap", required=True, help="Original pcap file")
-    ap.add_argument("--topology", required=True, help="simulated_topology.json")
+    ap.add_argument("--topology", default="simulated_topology.json", help="simulated_topology.json")
     ap.add_argument("--rewritten", default="", help="Output rewritten pcap path")
     ap.add_argument("--multiplier", type=float, default=1.0, help="Replay speed multiplier")
     ap.add_argument("--ground-truth", default="ground_truth.csv", help="Ground truth CSV path")

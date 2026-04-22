@@ -11,7 +11,6 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
 
 DOCKER_PREFIX = "master-thesis-"
 TCPREPLAY_IMAGE = "local/tcpreplay"
@@ -19,52 +18,39 @@ GW_CONTAINER = f"{DOCKER_PREFIX}gw"
 GW_CAPTURE_TMP = "/tmp/replay_traffic_gateway.pcap"
 
 GROUND_TRUTH_FIELDS = [
-    "execution_id",
-    "sample_id",
-    "attack_class",
-    "traffic_label",
-    "original_sender_ip",
-    "mapped_sender_ip",
-    "sender_container",
-    "sender_interface",
-    "replay_start_time_utc",
-    "replay_end_time_utc",
-    "replay_multiplier",
-    "status",
-    "notes",
+    "execution_id", "sample_id", "attack_class", "traffic_label",
+    "original_sender_ip", "mapped_sender_ip", "sender_container", "sender_interface",
+    "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
+    "status", "notes",
 ]
 
 
-def run(cmd: List[str], check: bool = True, capture_output: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, check=check, text=True, capture_output=capture_output)
+def run(cmd, **kwargs):
+    return subprocess.run(cmd, text=True, capture_output=True, check=True, **kwargs)
 
 
-def docker_exec(container: str, shell_cmd: str) -> str:
+def docker_exec(container, shell_cmd):
     return run(["docker", "exec", container, "sh", "-lc", shell_cmd]).stdout.strip()
 
 
-def now_utc() -> datetime:
+def now_utc():
     return datetime.now(timezone.utc)
 
 
-def fmt_utc(dt: datetime) -> str:
+def fmt_utc(dt):
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def load_topology(path: str) -> Dict:
-    with open(path, "r", encoding="utf-8") as f:
+def load_json(path):
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
-def mapping_by_original_ip(topology: Dict) -> Dict[str, Dict]:
-    return {
-        row["original_ip"]: row
-        for row in topology.get("mapping", [])
-        if row.get("original_ip")
-    }
+def mapping_by_original_ip(topology):
+    return {row["original_ip"]: row for row in topology.get("mapping", []) if row.get("original_ip")}
 
 
-def build_rewrite_map(topology: Dict) -> str:
+def build_rewrite_map(topology):
     pairs = [
         f'{row["original_ip"]}:{row["simulated_ip"]}'
         for row in topology.get("mapping", [])
@@ -75,23 +61,17 @@ def build_rewrite_map(topology: Dict) -> str:
     return ",".join(pairs)
 
 
-def auto_detect_sender_row(topology: Dict) -> Dict:
+def auto_detect_sender_row(topology):
     by_ip = mapping_by_original_ip(topology)
-    scores: Dict[str, int] = defaultdict(int)
+    scores = defaultdict(int)
 
     for edge in topology.get("edges", []):
         src_ip = edge.get("src_original_ip")
-        if not src_ip or src_ip not in by_ip:
+        row = by_ip.get(src_ip)
+        if not row or row.get("sim_type") != "internal" or row.get("service_name") in {"gw", "dns"}:
             continue
-
-        row = by_ip[src_ip]
-        if row.get("sim_type") != "internal":
-            continue
-        if row.get("service_name") in {"gw", "dns"}:
-                continue
-
-        packet_count = int(edge.get("packet_count", 0))
-        scores[src_ip] += packet_count * (10 if edge.get("dst_service") is not None else 1)
+        pkt_count = int(edge.get("packet_count", 0))
+        scores[src_ip] += pkt_count * (10 if edge.get("dst_service") is not None else 1)
 
     if not scores:
         raise ValueError("Could not auto-detect a replay sender host from topology.")
@@ -99,7 +79,7 @@ def auto_detect_sender_row(topology: Dict) -> Dict:
     return by_ip[max(scores, key=scores.get)]
 
 
-def ensure_tcpreplay_image() -> None:
+def ensure_tcpreplay_image():
     exists = subprocess.run(
         ["docker", "image", "inspect", TCPREPLAY_IMAGE],
         text=True,
@@ -120,14 +100,18 @@ def ensure_tcpreplay_image() -> None:
         subprocess.run(["docker", "build", "-t", TCPREPLAY_IMAGE, tmpdir], check=True)
 
 
-def discover_interface(container: str, target_ip: str) -> str:
+def route_iface(container, target_ip):
     cmd = (
         f"ip route get {target_ip} | "
         "awk '{for(i=1;i<=NF;i++) if($i==\"dev\"){print $(i+1); exit}}'"
     )
+    return docker_exec(container, cmd)
+
+
+def discover_interface(container, target_ip):
     for candidate in (f"{container}-route", container):
         try:
-            iface = docker_exec(candidate, cmd)
+            iface = route_iface(candidate, target_ip)
             if iface:
                 return iface
         except Exception:
@@ -135,22 +119,18 @@ def discover_interface(container: str, target_ip: str) -> str:
     raise RuntimeError(f"Could not discover interface for {container} towards {target_ip}")
 
 
-def discover_gateway_interface(target_ip: str) -> str:
-    cmd = (
-        f"ip route get {target_ip} | "
-        "awk '{for(i=1;i<=NF;i++) if($i==\"dev\"){print $(i+1); exit}}'"
-    )
-    iface = docker_exec(GW_CONTAINER, cmd)
+def discover_gateway_interface(target_ip):
+    iface = route_iface(GW_CONTAINER, target_ip)
     if not iface:
         raise RuntimeError(f"Could not discover gateway interface towards {target_ip}")
     return iface
 
 
-def cleanup_gateway_capture() -> None:
+def cleanup_gateway_capture():
     docker_exec(GW_CONTAINER, f"rm -f {GW_CAPTURE_TMP} /tmp/replay_traffic_gateway.log")
 
 
-def start_gateway_capture(iface: str) -> str:
+def start_gateway_capture(iface):
     cmd = (
         f"nohup tcpdump -U -i {iface} -nn -s 0 not arp "
         f"-w {GW_CAPTURE_TMP} >/tmp/replay_traffic_gateway.log 2>&1 & echo $!"
@@ -158,48 +138,44 @@ def start_gateway_capture(iface: str) -> str:
     pid = docker_exec(GW_CONTAINER, cmd)
     if not pid:
         raise RuntimeError("Failed to start gateway capture.")
-    return pid.strip()
+    return pid
 
 
-def stop_gateway_capture(pid: str) -> None:
-    if pid.strip():
+def stop_gateway_capture(pid):
+    if pid:
         docker_exec(GW_CONTAINER, f"kill {pid} 2>/dev/null || true")
 
 
-def copy_gateway_capture(output_path: str) -> Path:
+def copy_gateway_capture(output_path):
     out = Path(output_path).expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-
-    subprocess.run(
-        ["docker", "cp", f"{GW_CONTAINER}:{GW_CAPTURE_TMP}", str(out)],
-        check=True,
-    )
+    subprocess.run(["docker", "cp", f"{GW_CONTAINER}:{GW_CAPTURE_TMP}", str(out)], check=True)
     return out
 
 
-def rewrite_pcap(pcap_in: str, pcap_out: str, rewrite_map: str) -> Path:
-    pcap_in_path = Path(pcap_in).expanduser().resolve()
-    pcap_out_path = Path(pcap_out).expanduser().resolve()
+def rewrite_pcap(pcap_in, pcap_out, rewrite_map):
+    pcap_in = Path(pcap_in).expanduser().resolve()
+    pcap_out = Path(pcap_out).expanduser().resolve()
 
-    if not pcap_in_path.exists():
-        raise FileNotFoundError(f"PCAP not found: {pcap_in_path}")
+    if not pcap_in.exists():
+        raise FileNotFoundError(f"PCAP not found: {pcap_in}")
 
     print("[*] Rewriting pcap...")
     subprocess.run(
         [
             "tcprewrite",
-            f"--infile={pcap_in_path}",
-            f"--outfile={pcap_out_path}",
+            f"--infile={pcap_in}",
+            f"--outfile={pcap_out}",
             f"--srcipmap={rewrite_map}",
             f"--dstipmap={rewrite_map}",
             "--fixcsum",
         ],
         check=True,
     )
-    return pcap_out_path
+    return pcap_out
 
 
-def replay_from_namespace(container: str, iface: str, pcap_path: Path, multiplier: float) -> None:
+def replay_from_namespace(container, iface, pcap_path, multiplier):
     print("[*] Replaying from sender namespace...")
     subprocess.run(
         [
@@ -217,13 +193,13 @@ def replay_from_namespace(container: str, iface: str, pcap_path: Path, multiplie
     )
 
 
-def next_execution_id(path: str) -> str:
+def next_execution_id(path):
     gt = Path(path)
     if not gt.exists():
         return "1"
 
     max_id = 0
-    with gt.open("r", newline="", encoding="utf-8") as f:
+    with gt.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             raw = str(row.get("execution_id", "")).strip()
             if raw.isdigit():
@@ -231,7 +207,7 @@ def next_execution_id(path: str) -> str:
     return str(max_id + 1)
 
 
-def append_ground_truth(path: str, row: Dict[str, str]) -> None:
+def append_ground_truth(path, row):
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     exists = out.exists()
@@ -243,26 +219,14 @@ def append_ground_truth(path: str, row: Dict[str, str]) -> None:
         writer.writerow(row)
 
 
-def make_ground_truth_row(
-    ground_truth_path: str,
-    pcap_path: str,
-    sender_row: Dict,
-    sender_container: str,
-    iface: str,
-    multiplier: float,
-    attack_class: str,
-    start_time: datetime,
-    end_time: datetime,
-    status: str,
-    notes: str,
-) -> Dict[str, str]:
-    clean_attack_class = attack_class.strip()
-    traffic_label = "benign" if clean_attack_class == "" else "malicious"
+def make_ground_truth_row(ground_truth_path, pcap_path, sender_row, sender_container,
+                          iface, multiplier, attack_class, start_time, end_time, status, notes):
+    attack_class = attack_class.strip()
     return {
         "execution_id": next_execution_id(ground_truth_path),
         "sample_id": Path(pcap_path).stem,
-        "attack_class": clean_attack_class,
-        "traffic_label": traffic_label,
+        "attack_class": attack_class,
+        "traffic_label": "benign" if not attack_class else "malicious",
         "original_sender_ip": str(sender_row.get("original_ip", "")),
         "mapped_sender_ip": str(sender_row.get("simulated_ip", "")),
         "sender_container": sender_container,
@@ -275,51 +239,43 @@ def make_ground_truth_row(
     }
 
 
-def main() -> None:
+def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcap", required=True, help="Original pcap file")
-    ap.add_argument("--topology", default="simulated_topology.json", help="simulated_topology.json")
-    ap.add_argument("--rewritten", default="", help="Output rewritten pcap path")
-    ap.add_argument("--multiplier", type=float, default=1.0, help="Replay speed multiplier")
-    ap.add_argument("--ground-truth", default="ground_truth.csv", help="Ground truth CSV path")
-    ap.add_argument("--attack-class", default="", help="Leave empty for benign traffic")
-    ap.add_argument("--notes", default="", help="Optional notes")
-    ap.add_argument(
-        "--capture-out",
-        default="replay_traffic_gateway.pcap",
-        help="Output path for gateway-side replay capture",
-    )
+    ap.add_argument("--topology", default="simulated_topology.json")
+    ap.add_argument("--rewritten", default="")
+    ap.add_argument("--multiplier", type=float, default=1.0)
+    ap.add_argument("--ground-truth", default="ground_truth.csv")
+    ap.add_argument("--attack-class", default="")
+    ap.add_argument("--notes", default="")
+    ap.add_argument("--capture-out", default="replay_traffic_gateway.pcap")
     args = ap.parse_args()
 
-    topology = load_topology(args.topology)
+    topology = load_json(args.topology)
     sender_row = auto_detect_sender_row(topology)
 
     original_ip = sender_row.get("original_ip")
     simulated_ip = sender_row.get("simulated_ip")
     service_name = sender_row.get("service_name")
     gateway_ip = sender_row.get("gateway_ip")
-
     if not all([original_ip, simulated_ip, service_name, gateway_ip]):
         raise ValueError(f"Auto-detected sender row is incomplete: {sender_row}")
 
     sender_container = DOCKER_PREFIX + service_name
-    rewritten = args.rewritten or f"{Path(args.pcap).stem}_rewritten.pcap"
+    rewritten_path = Path(args.rewritten or f"{Path(args.pcap).stem}_rewritten.pcap").expanduser().resolve()
     attack_class = args.attack_class.strip()
-    traffic_label = "benign" if attack_class == "" else "malicious"
+    traffic_label = "benign" if not attack_class else "malicious"
 
     print(f"[*] Sender original IP : {original_ip}")
     print(f"[*] Sender simulated IP: {simulated_ip}")
     print(f"[*] Sender container   : {sender_container}")
     print(f"[*] Sender gateway IP  : {gateway_ip}")
-    print(f"[*] Attack class       : {attack_class if attack_class else '(empty)'}")
+    print(f"[*] Attack class       : {attack_class or '(empty)'}")
     print(f"[*] Traffic label      : {traffic_label}")
     print(f"[*] Ground truth file  : {args.ground_truth}")
     print(f"[*] Gateway capture out: {args.capture_out}")
 
-    iface = ""
-    gateway_iface = ""
-    capture_pid = ""
-    rewritten_path = Path(rewritten).expanduser().resolve()
+    iface = gateway_iface = capture_pid = ""
     start_time = None
     status = "failed"
     notes = args.notes.strip()
@@ -331,9 +287,7 @@ def main() -> None:
         gateway_iface = discover_gateway_interface(simulated_ip)
         print(f"[*] Gateway interface  : {gateway_iface}")
 
-        rewrite_map = build_rewrite_map(topology)
-        rewritten_path = rewrite_pcap(args.pcap, str(rewritten_path), rewrite_map)
-
+        rewritten_path = rewrite_pcap(args.pcap, str(rewritten_path), build_rewrite_map(topology))
         ensure_tcpreplay_image()
 
         cleanup_gateway_capture()
@@ -341,7 +295,6 @@ def main() -> None:
         print(f"[*] Started gateway capture on {gateway_iface} (pid={capture_pid})")
 
         time.sleep(1)
-
         start_time = now_utc()
         replay_from_namespace(sender_container, iface, rewritten_path, args.multiplier)
         status = "completed"
@@ -353,8 +306,7 @@ def main() -> None:
 
     finally:
         end_time = now_utc()
-        if start_time is None:
-            start_time = end_time
+        start_time = start_time or end_time
 
         try:
             if capture_pid:
@@ -369,17 +321,8 @@ def main() -> None:
             print(f"[!] Warning: {warn}")
 
         row = make_ground_truth_row(
-            ground_truth_path=args.ground_truth,
-            pcap_path=args.pcap,
-            sender_row=sender_row,
-            sender_container=sender_container,
-            iface=iface,
-            multiplier=args.multiplier,
-            attack_class=attack_class,
-            start_time=start_time,
-            end_time=end_time,
-            status=status,
-            notes=notes,
+            args.ground_truth, args.pcap, sender_row, sender_container, iface,
+            args.multiplier, attack_class, start_time, end_time, status, notes
         )
         append_ground_truth(args.ground_truth, row)
         print(f"[*] Ground truth row appended to: {args.ground_truth}")

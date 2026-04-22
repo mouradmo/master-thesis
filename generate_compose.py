@@ -10,7 +10,6 @@ from typing import Any, Dict, List
 import yaml
 
 GW_HOST_OCTET4 = 254
-
 A_OCTET2_BASE = 30
 A_SERVER_OCTET3 = 10
 HOST_OCTET3_START = 11  # host_01 -> 11 (=> .11.11), host_02 -> 12, ...
@@ -19,39 +18,31 @@ HOST_OCTET3_START = 11  # host_01 -> 11 (=> .11.11), host_02 -> 12, ...
 
 # Linux image for external hosts
 EXTERNAL_IMAGE_NAME = "nicolaka/netshoot:latest"
+ROUTE_IMAGE = "nicolaka/netshoot:latest"
+INTERNAL_IMAGE = "curlimages/curl:latest"
 
 
 def zone_letters(n: int) -> List[str]:
-    if n < 1:
-        raise ValueError("zones must be >= 1 (Zone A must exist)")
-    if n > 26:
-        raise ValueError("supports up to 26 zones (A-Z)")
+    if not 1 <= n <= 26:
+        raise ValueError("zones must be between 1 and 26 (Zone A..Z)")
     return list(string.ascii_uppercase[:n])
 
 
 def parse_hosts_per_zone(s: str, zones: int) -> List[int]:
-    parts = [p.strip() for p in s.split(",") if p.strip() != ""]
-    if len(parts) != zones:
+    counts = [int(p.strip()) for p in s.split(",") if p.strip()]
+    if len(counts) != zones:
         raise ValueError(f"--hosts-per-zone must have exactly {zones} integers (for zones A..)")
-
-    counts = [int(p) for p in parts]
-
     if any(c < 0 for c in counts):
         raise ValueError("host counts must be >= 0")
     if any(c > 200 for c in counts):
         raise ValueError("host counts must be <= 200")
 
     for zi, c in enumerate(counts):
-        if c == 0:
-            continue
-        end = HOST_OCTET3_START + c - 1
-        if end > 253:
-            z = string.ascii_uppercase[zi]
+        if c and HOST_OCTET3_START + c - 1 > 253:
             raise ValueError(
-                f"Zone {z}: host octet3 range exceeds .253 "
+                f"Zone {string.ascii_uppercase[zi]}: host octet3 range exceeds .253 "
                 f"(start={HOST_OCTET3_START}, count={c})"
             )
-
     return counts
 
 
@@ -64,7 +55,6 @@ def gw_ip(o2: int, o3: int) -> str:
 
 
 def host_ip_pattern(o2: int, o3: int) -> str:
-    # matches: 172.<o2>.<o3>.<o3>
     return f"172.{o2}.{o3}.{o3}"
 
 
@@ -103,23 +93,42 @@ def net_name_external(zone: str, i: int) -> str:
 #     return cleaned
 
 
-def make_compose(
-    num_zones: int,
-    hosts_per_zone: List[int],
-    pcap_filename: str,
-) -> Dict[str, Any]:
-    zones = zone_letters(num_zones)
+def host_entries(zones: List[str], hosts_per_zone: List[int]):
+    for zi, z in enumerate(zones):
+        o2 = A_OCTET2_BASE + zi
+        for i in range(1, hosts_per_zone[zi] + 1):
+            o3 = HOST_OCTET3_START + (i - 1)
+            if z == "A":
+                name = f"A_internal_host_{i:02d}"
+                net = net_name_a_internal(i)
+                image = INTERNAL_IMAGE
+                cap_add = None
+            else:
+                name = f"{z}_external_host_{i:02d}"
+                net = net_name_external(z, i)
+                image = EXTERNAL_IMAGE_NAME
+                cap_add = ["NET_ADMIN", "NET_RAW"]
 
-    compose: Dict[str, Any] = {"services": {}, "networks": {}}
-    services: Dict[str, Any] = compose["services"]
-    networks: Dict[str, Any] = compose["networks"]
+            yield {
+                "zone": z,
+                "o2": o2,
+                "o3": o3,
+                "name": name,
+                "net": net,
+                "image": image,
+                "cap_add": cap_add,
+                "ip_addr": host_ip_pattern(o2, o3),
+                "gw_addr": gw_ip(o2, o3),
+            }
 
-    gw_networks: Dict[str, Any] = {}
-    all_subnets: List[str] = []
+
+def build_networks(zones: List[str], hosts_per_zone: List[int]):
+    networks = {}
+    gw_networks = {}
+    all_subnets = []
 
     for zi, z in enumerate(zones):
         o2 = A_OCTET2_BASE + zi
-        host_count = hosts_per_zone[zi]
 
         if z == "A":
             networks[net_name_a_server()] = {
@@ -129,28 +138,59 @@ def make_compose(
             gw_networks[net_name_a_server()] = {"ipv4_address": gw_ip(o2, A_SERVER_OCTET3)}
             all_subnets.append(subnet(o2, A_SERVER_OCTET3))
 
-            for i in range(1, host_count + 1):
-                o3 = HOST_OCTET3_START + (i - 1)
-                net = net_name_a_internal(i)
-                networks[net] = {
-                    "driver": "bridge",
-                    "ipam": {"config": [{"subnet": subnet(o2, o3)}]},
-                }
-                gw_networks[net] = {"ipv4_address": gw_ip(o2, o3)}
-                all_subnets.append(subnet(o2, o3))
-        else:
-            for i in range(1, host_count + 1):
-                o3 = HOST_OCTET3_START + (i - 1)
-                net = net_name_external(z, i)
-                networks[net] = {
-                    "driver": "bridge",
-                    "ipam": {"config": [{"subnet": subnet(o2, o3)}]},
-                }
-                gw_networks[net] = {"ipv4_address": gw_ip(o2, o3)}
-                all_subnets.append(subnet(o2, o3))
+        for entry in host_entries([z], [hosts_per_zone[zi]]):
+            networks[entry["net"]] = {
+                "driver": "bridge",
+                "ipam": {"config": [{"subnet": subnet(entry["o2"], entry["o3"])}]},
+            }
+            gw_networks[entry["net"]] = {"ipv4_address": entry["gw_addr"]}
+            all_subnets.append(subnet(entry["o2"], entry["o3"]))
+
+    return networks, gw_networks, all_subnets
+
+
+def make_host_service(entry):
+    svc = {
+        "image": entry["image"],
+        "container_name": f"master-thesis-{entry['name']}",
+        "command": "sleep infinity",
+        # "dns": [CORE_DNS_IP],
+        # "dns_search": ["local"],
+        "networks": {entry["net"]: {"ipv4_address": entry["ip_addr"]}},
+    }
+    if entry["cap_add"]:
+        svc["cap_add"] = entry["cap_add"]
+    return svc
+
+
+def make_route_service(name: str, gw_addr: str):
+    return {
+        "image": ROUTE_IMAGE,
+        "container_name": f"master-thesis-{name}-route",
+        "network_mode": f"service:{name}",
+        "depends_on": [name, "gw"],
+        "cap_add": ["NET_ADMIN"],
+        "command": (
+            "sh -c \""
+            "ip route del default 2>/dev/null || true; "
+            f"ip route add default via {gw_addr}; "
+            "sleep infinity"
+            "\""
+        ),
+    }
+
+
+def make_compose(
+    num_zones: int,
+    hosts_per_zone: List[int],
+    pcap_filename: str,
+) -> Dict[str, Any]:
+    zones = zone_letters(num_zones)
+    services: Dict[str, Any] = {}
+    networks, gw_networks, all_subnets = build_networks(zones, hosts_per_zone)
 
     services["gw"] = {
-        "image": "nicolaka/netshoot:latest",
+        "image": ROUTE_IMAGE,
         "container_name": "master-thesis-gw",
         "cap_add": ["NET_ADMIN", "NET_RAW"],
         "sysctls": {"net.ipv4.ip_forward": "1"},
@@ -317,78 +357,14 @@ def make_compose(
     #     ),
     # }
 
-    for zi, z in enumerate(zones):
-        o2 = A_OCTET2_BASE + zi
-        host_count = hosts_per_zone[zi]
+    for entry in host_entries(zones, hosts_per_zone):
+        services[entry["name"]] = make_host_service(entry)
+        services[f"{entry['name']}_route"] = make_route_service(entry["name"], entry["gw_addr"])
 
-        if z == "A":
-            for i in range(1, host_count + 1):
-                o3 = HOST_OCTET3_START + (i - 1)
-                name = f"A_internal_host_{i:02d}"
-                net = net_name_a_internal(i)
-                ip_addr = host_ip_pattern(o2, o3)
-                gw_addr = gw_ip(o2, o3)
-
-                services[name] = {
-                    "image": "curlimages/curl:latest",
-                    "container_name": f"master-thesis-{name}",
-                    "command": "sleep infinity",
-                    # "dns": [CORE_DNS_IP],
-                    # "dns_search": ["local"],
-                    "networks": {net: {"ipv4_address": ip_addr}},
-                }
-
-                services[f"{name}_route"] = {
-                    "image": "nicolaka/netshoot:latest",
-                    "container_name": f"master-thesis-{name}-route",
-                    "network_mode": f"service:{name}",
-                    "depends_on": [name, "gw"],
-                    "cap_add": ["NET_ADMIN"],
-                    "command": (
-                        "sh -c \""
-                        "ip route del default 2>/dev/null || true; "
-                        f"ip route add default via {gw_addr}; "
-                        "sleep infinity"
-                        "\""
-                    ),
-                }
-        else:
-            for i in range(1, host_count + 1):
-                o3 = HOST_OCTET3_START + (i - 1)
-                name = f"{z}_external_host_{i:02d}"
-                net = net_name_external(z, i)
-                ip_addr = host_ip_pattern(o2, o3)
-                gw_addr = gw_ip(o2, o3)
-
-                services[name] = {
-                    "image": EXTERNAL_IMAGE_NAME,
-                    "container_name": f"master-thesis-{name}",
-                    "command": "sleep infinity",
-                    # "dns": [CORE_DNS_IP],
-                    # "dns_search": ["local"],
-                    "cap_add": ["NET_ADMIN", "NET_RAW"],
-                    "networks": {net: {"ipv4_address": ip_addr}},
-                }
-
-                services[f"{name}_route"] = {
-                    "image": "nicolaka/netshoot:latest",
-                    "container_name": f"master-thesis-{name}-route",
-                    "network_mode": f"service:{name}",
-                    "depends_on": [name, "gw"],
-                    "cap_add": ["NET_ADMIN"],
-                    "command": (
-                        "sh -c \""
-                        "ip route del default 2>/dev/null || true; "
-                        f"ip route add default via {gw_addr}; "
-                        "sleep infinity"
-                        "\""
-                    ),
-                }
-
-    net_filter = " or ".join([f"net {s}" for s in all_subnets]) if all_subnets else "ip"
+    net_filter = " or ".join(f"net {s}" for s in all_subnets) if all_subnets else "ip"
 
     services["capture"] = {
-        "image": "nicolaka/netshoot:latest",
+        "image": ROUTE_IMAGE,
         "container_name": "master-thesis-capture",
         "profiles": ["capture"],
         "network_mode": "service:gw",
@@ -403,63 +379,47 @@ def make_compose(
         ),
     }
 
-    return compose
+    return {"services": services, "networks": networks}
+
+
+def load_topology_config(path: str, ap: argparse.ArgumentParser):
+    with open(path, "r", encoding="utf-8") as f:
+        topo = json.load(f)
+
+    # dns_names = load_emulated_dns_names(topo)
+
+    zones = topo.get("zones")
+    hosts_per_zone = topo.get("hosts_per_zone")
+
+    if not isinstance(zones, int):
+        ap.error("'zones' in topology file must be an integer")
+    if not isinstance(hosts_per_zone, list) or not all(isinstance(x, int) for x in hosts_per_zone):
+        ap.error("'hosts_per_zone' in topology file must be a list of integers")
+    if len(hosts_per_zone) != zones:
+        ap.error(f"Topology mismatch: zones={zones} but hosts_per_zone has {len(hosts_per_zone)} entries")
+
+    return zones, parse_hosts_per_zone(",".join(map(str, hosts_per_zone)), zones)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-
     ap.add_argument("--zones", type=int, help="Number of zones (includes A). Example: 4 => A,B,C,D")
-    ap.add_argument(
-        "--hosts-per-zone",
-        type=str,
-        help="Comma-separated host counts for zones A,B,C,... Example: 2,3,1,0",
-    )
+    ap.add_argument("--hosts-per-zone", type=str, help="Comma-separated host counts for zones A,B,C,... Example: 2,3,1,0")
     ap.add_argument("--topology", type=str, help="Path to simulated_topology.json")
     ap.add_argument("--pcap", default="gateway.pcap")
     ap.add_argument("--out", default="docker-compose.yml")
-
     args = ap.parse_args()
 
     if args.topology:
-        with open(args.topology, "r", encoding="utf-8") as f:
-            topo = json.load(f)
-
-        # dns_names = load_emulated_dns_names(topo)
-
-        if "zones" not in topo or "hosts_per_zone" not in topo:
-            ap.error("--topology file must contain 'zones' and 'hosts_per_zone'")
-
-        zones = topo["zones"]
-        hosts_per_zone = topo["hosts_per_zone"]
-
-        if not isinstance(zones, int):
-            ap.error("'zones' in topology file must be an integer")
-
-        if not isinstance(hosts_per_zone, list) or not all(isinstance(x, int) for x in hosts_per_zone):
-            ap.error("'hosts_per_zone' in topology file must be a list of integers")
-
-        if len(hosts_per_zone) != zones:
-            ap.error(
-                f"Topology mismatch: zones={zones} but hosts_per_zone has {len(hosts_per_zone)} entries"
-            )
-
-        hosts_per_zone = parse_hosts_per_zone(",".join(map(str, hosts_per_zone)), zones)
-
+        zones, hosts_per_zone = load_topology_config(args.topology, ap)
     else:
         if args.zones is None or args.hosts_per_zone is None:
             ap.error("Either provide --topology or both --zones and --hosts-per-zone")
-
         zones = args.zones
         hosts_per_zone = parse_hosts_per_zone(args.hosts_per_zone, zones)
         # dns_names = []
 
-    compose = make_compose(
-        num_zones=zones,
-        hosts_per_zone=hosts_per_zone,
-        pcap_filename=args.pcap,
-    )
-
+    compose = make_compose(zones, hosts_per_zone, args.pcap)
     Path(args.out).write_text(
         yaml.safe_dump(compose, sort_keys=False, indent=2, width=120),
         encoding="utf-8",

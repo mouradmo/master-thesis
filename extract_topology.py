@@ -237,8 +237,9 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
 
     # Keep only one mapped internal DNS service.
     if grouped["infra_dns"]:
+        dns_original = grouped["infra_dns"][0]["original_ip"]
         mapping.append({
-            "original_ip": grouped["infra_dns"][0]["original_ip"],
+            "original_ip": dns_original,
             "original_role": "internal_dns",
             "sim_type": "infra_dns",
             "zone": "A",
@@ -246,6 +247,9 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
             "simulated_ip": INTERNAL_DNS_IP,
             "gateway_ip": INTERNAL_DNS_GW,
         })
+        print(f"internal_dns={dns_original} -> {INTERNAL_DNS_IP}")
+    else:
+        print("internal_dns=none")
 
     service_by_ip = {m["original_ip"]: m["service_name"] for m in mapping}
     sim_ip_by_ip = {m["original_ip"]: m["simulated_ip"] for m in mapping}

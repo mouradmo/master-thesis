@@ -60,8 +60,6 @@ Set up Python environment and install dependencies:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install pandas dpkt python-dateutil
 ```
 
 Run the labeling script:

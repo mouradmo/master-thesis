@@ -5,8 +5,7 @@ import argparse, csv, hashlib, json, subprocess, sys, tempfile, time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from scapy.all import rdpcap, wrpcap, IP, TCP, UDP, DNS
-
+from scapy.all import rdpcap, wrpcap, IP, TCP, UDP, DNS, Ether
 DOCKER_PREFIX = "master-thesis-"
 TCPREPLAY_IMAGE = "local/tcpreplay"
 GW = f"{DOCKER_PREFIX}gw"
@@ -20,6 +19,13 @@ GT_FIELDS = [
     "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
     "status", "notes",
 ]
+
+PROTO_DST_MAC = {
+    137: "ff:ff:ff:ff:ff:ff",  # NBNS
+    5353: "01:00:5e:00:00:fb", # mDNS
+    5355: "01:00:5e:00:00:fc", # LLMNR
+    1900: "01:00:5e:7f:ff:fa", # SSDP
+}
 
 
 def run(cmd, **kw):
@@ -148,7 +154,13 @@ def stop_capture(pid):
 def copy_from_gw(tmp, out):
     out = Path(out).expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["docker", "cp", f"{GW}:{tmp}", str(out)], check=True)
+    subprocess.run(
+        ["docker", "cp", f"{GW}:{tmp}", str(out)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )    
+    print(f"[*] Copied capture       : {out.name}")
     return out
 
 
@@ -188,7 +200,7 @@ def replay(container, iface, pcap, multiplier):
         f"/work/{pcap.name}",
     ]
 
-    print(f"[*] Replaying packets... 0/{total} 0.0%", end="", flush=True)
+    print(f"[*] Replaying packets    : 0/{total} 0.0%", end="", flush=True)
 
     proc = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     last = 0
@@ -200,12 +212,12 @@ def replay(container, iface, pcap, multiplier):
             parts = line.replace(":", " ").split()
             last = max(last, int(parts[parts.index("Actual") + 1]))
             pct = min(100.0, last * 100 / total) if total else 0
-            print(f"\r[*] Replaying packets... {last}/{total} {pct:.1f}%", end="", flush=True)
+            print(f"\r[*] Replaying packets    : {last}/{total} {pct:.1f}%", end="", flush=True)
         except Exception:
             pass
 
     rc = proc.wait()
-    print(f"\r[*] Replaying packets... {total}/{total} 100.0%")
+    print(f"\r[*] Replaying packets    : {total}/{total} 100.0%")
     if rc:
         raise subprocess.CalledProcessError(rc, cmd)
 
@@ -365,36 +377,73 @@ def grouped(pkts, sender, ipmap):
 def is_nbns(p):
     return UDP in p and p[UDP].dport == 137
 
+def to_ether(replay_pkt, mac_pkt):
+    src = mac_pkt[Ether].src if Ether in mac_pkt else "00:00:00:00:00:00"
+    dst = mac_pkt[Ether].dst if Ether in mac_pkt else "00:00:00:00:00:00"
 
-def filter_pcap(original, replayed, out):
-    orig, rep = rdpcap(str(original)), rdpcap(str(replayed))
-    sender, ipmap = filter_ip_map(orig, rep)
-    pool = grouped(rep, sender, ipmap)
+    if UDP in replay_pkt and replay_pkt[UDP].dport in PROTO_DST_MAC:
+        dst = PROTO_DST_MAC[replay_pkt[UDP].dport]
+
+    q = Ether(src=src, dst=dst, type=0x0800) / replay_pkt[IP].copy()
+    q.time = replay_pkt.time
+    return q
+
+def filter_pcap(original, sender_capture, gateway_capture, out):
+    orig = rdpcap(str(original))
+    sender_cap = rdpcap(str(sender_capture))
+    gw_cap = rdpcap(str(gateway_capture))
+
+    sender, gw_ipmap = filter_ip_map(orig, gw_cap)
+    _, sender_ipmap = filter_ip_map(orig, sender_cap)
+
+    gw_pool = grouped(gw_cap, sender, gw_ipmap)
+    mac_pool = grouped(sender_cap, sender, sender_ipmap)
 
     kept, missing = [], []
+    #
+    last_time = None
 
     for n, p in enumerate(orig, start=1):
-        k = pkt_key(p, sender, ipmap)
-        if not k:
+        k_gw = pkt_key(p, sender, gw_ipmap)
+        k_mac = pkt_key(p, sender, sender_ipmap)
+
+        if not k_gw:
             continue
-        if k not in pool or not pool[k]:
+
+        if k_gw not in gw_pool or not gw_pool[k_gw]:
             missing.append(n)
             continue
-        kept.append(pool[k].pop(0) if is_nbns(p) else pool[k].pop())
 
-    kept.sort(key=lambda p: float(p.time))
-    wrpcap(str(out), kept)
+        gw_match = gw_pool[k_gw].pop(0) if is_nbns(p) else gw_pool[k_gw].pop()
 
-    print(f"[*] Clean egress created : {Path(out).resolve()}")
+        if k_mac in mac_pool and mac_pool[k_mac]:
+            mac_match = mac_pool[k_mac].pop(0) if is_nbns(p) else mac_pool[k_mac].pop()
+        else:
+            mac_match = p  
+
+        out_pkt = to_ether(gw_match, mac_match)
+
+        # NBNS can appear slightly earlier in replay capture.
+        # Keep original protocol/order, but avoid equal/backward timestamps.
+        if last_time is not None and float(out_pkt.time) <= last_time:
+            out_pkt.time = last_time + 0.000001
+
+        last_time = float(out_pkt.time)
+        kept.append(out_pkt)
+
+    # Convert Linux cooked capture to Ethernet.
+    # SLL2 is 20 bytes, Ethernet is 14 bytes => frame.len becomes 6 bytes smaller.
+    wrpcap(str(out), kept, linktype=1)
+
+    print(f"[*] Clean egress created : {Path(out).name}")
     print(f"[*] Clean egress packets : {len(kept)}")
     print(f"[*] Missing packets      : {len(missing)}")
-
 
 # ---------- main ----------
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pcap", required=True)
+    ap.add_argument("--pcap", default="")    
     ap.add_argument("--topology", default="simulated_topology.json")
     ap.add_argument("--rewritten", default="")
     ap.add_argument("--multiplier", type=float, default=1.0)
@@ -409,6 +458,13 @@ def main():
 
     topology = load_json(args.topology)
     sender = detect_sender(topology)
+    if not args.pcap:
+        args.pcap = topology.get("pcap_file", "")
+
+    if not args.pcap:
+        raise ValueError("No --pcap provided and topology has no pcap_file field.")
+
+    args.pcap = str(Path(args.pcap).expanduser().resolve())
 
     original_ip = sender.get("original_ip")
     simulated_ip = sender.get("simulated_ip")
@@ -437,7 +493,10 @@ def main():
     try:
         iface = sender_iface(container, gateway_ip)
         gwi = gw_iface(simulated_ip)
+        print(f"[*] Sender interface     : {iface}")
+        print(f"[*] GW ingress interface : {gwi}")
         mac = iface_mac(GW, gwi)
+
 
         rewritten = rewrite_pcap(args.pcap, rewritten, make_rewrite_map(topology), mac)
 
@@ -473,7 +532,7 @@ def main():
                 main_out = copy_from_gw(MAIN_TMP, args.capture_out)
 
                 if not args.no_filter:
-                    filter_pcap(args.pcap, main_out, Path(args.clean_out).resolve())
+                    filter_pcap(args.pcap, args.capture_pre_out, main_out, Path(args.clean_out).resolve())
 
         except Exception as e:
             notes = f"{notes}; capture_or_filter_error={e}" if notes else f"capture_or_filter_error={e}"

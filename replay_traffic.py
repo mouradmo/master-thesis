@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
-import csv
-import json
-import subprocess
-import sys
-import tempfile
-import time
-from collections import defaultdict
+import argparse, csv, hashlib, json, subprocess, sys, tempfile, time
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from scapy.all import rdpcap, wrpcap, IP, TCP, UDP, DNS
 
 DOCKER_PREFIX = "master-thesis-"
 TCPREPLAY_IMAGE = "local/tcpreplay"
-GW_CONTAINER = f"{DOCKER_PREFIX}gw"
-GW_CAPTURE_TMP = "/tmp/replay_traffic_gateway.pcap"
+GW = f"{DOCKER_PREFIX}gw"
 
-GROUND_TRUTH_FIELDS = [
+PRE_TMP, PRE_LOG = "/tmp/replay_pre.pcap", "/tmp/replay_pre.log"
+MAIN_TMP, MAIN_LOG = "/tmp/replay_main.pcap", "/tmp/replay_main.log"
+
+GT_FIELDS = [
     "execution_id", "sample_id", "attack_class", "traffic_label",
     "original_sender_ip", "mapped_sender_ip", "sender_container", "sender_interface",
     "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
@@ -25,321 +22,485 @@ GROUND_TRUTH_FIELDS = [
 ]
 
 
-def run(cmd, **kwargs):
-    return subprocess.run(cmd, text=True, capture_output=True, check=True, **kwargs)
+def run(cmd, **kw):
+    return subprocess.run(cmd, text=True, capture_output=True, check=True, **kw)
 
 
-def docker_exec(container, shell_cmd):
-    return run(["docker", "exec", container, "sh", "-lc", shell_cmd]).stdout.strip()
+def sh(container, cmd):
+    return run(["docker", "exec", container, "sh", "-lc", cmd]).stdout.strip()
 
 
-def now_utc():
+def utc_now():
     return datetime.now(timezone.utc)
 
 
-def fmt_utc(dt):
+def utc_fmt(dt):
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def load_json(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def mapping_by_original_ip(topology):
-    return {row["original_ip"]: row for row in topology.get("mapping", []) if row.get("original_ip")}
+def rows_by_ip(topology):
+    return {r["original_ip"]: r for r in topology.get("mapping", []) if r.get("original_ip")}
 
 
-def build_rewrite_map(topology):
+def make_rewrite_map(topology):
     pairs = [
-        f'{row["original_ip"]}:{row["simulated_ip"]}'
-        for row in topology.get("mapping", [])
-        if row.get("original_ip") and row.get("simulated_ip")
+        f'{r["original_ip"]}:{r["simulated_ip"]}'
+        for r in topology.get("mapping", [])
+        if r.get("original_ip") and r.get("simulated_ip")
     ]
     if not pairs:
         raise ValueError("No usable IP mappings found in topology.")
     return ",".join(pairs)
 
 
-def auto_detect_sender_row(topology):
-    by_ip = mapping_by_original_ip(topology)
-    scores = defaultdict(int)
+def detect_sender(topology):
+    by_ip, scores = rows_by_ip(topology), defaultdict(int)
 
-    for edge in topology.get("edges", []):
-        src_ip = edge.get("src_original_ip")
-        row = by_ip.get(src_ip)
-        if not row or row.get("sim_type") != "internal" or row.get("service_name") in {"gw", "dns"}:
+    for e in topology.get("edges", []):
+        row = by_ip.get(e.get("src_original_ip"))
+        if not row or row.get("sim_type") != "internal":
             continue
-        pkt_count = int(edge.get("packet_count", 0))
-        scores[src_ip] += pkt_count * (10 if edge.get("dst_service") is not None else 1)
+        if row.get("service_name") in {"gw", "dns"}:
+            continue
+
+        scores[row["original_ip"]] += int(e.get("packet_count", 0)) * (
+            10 if e.get("dst_service") is not None else 1
+        )
 
     if not scores:
-        raise ValueError("Could not auto-detect a replay sender host from topology.")
+        raise ValueError("Could not auto-detect replay sender host.")
 
     return by_ip[max(scores, key=scores.get)]
 
 
 def ensure_tcpreplay_image():
-    exists = subprocess.run(
-        ["docker", "image", "inspect", TCPREPLAY_IMAGE],
-        text=True,
-        capture_output=True,
-    )
-    if exists.returncode == 0:
+    if subprocess.run(["docker", "image", "inspect", TCPREPLAY_IMAGE], capture_output=True).returncode == 0:
         return
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        dockerfile = Path(tmpdir) / "Dockerfile"
-        dockerfile.write_text(
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "Dockerfile").write_text(
             "FROM alpine:3.20\n"
             "RUN apk add --no-cache tcpreplay\n"
             'ENTRYPOINT ["tcpreplay"]\n',
             encoding="utf-8",
         )
-        print("[*] Building local tcpreplay image...")
-        subprocess.run(["docker", "build", "-t", TCPREPLAY_IMAGE, tmpdir], check=True)
+        print("[*] Building tcpreplay image")
+        subprocess.run(["docker", "build", "-t", TCPREPLAY_IMAGE, d], check=True)
 
 
-def route_iface(container, target_ip):
-    cmd = (
-        f"ip route get {target_ip} | "
-        "awk '{for(i=1;i<=NF;i++) if($i==\"dev\"){print $(i+1); exit}}'"
+def route_iface(container, ip):
+    return sh(
+        container,
+        f"ip route get {ip} | "
+        "awk '{for(i=1;i<=NF;i++) if($i==\"dev\"){print $(i+1); exit}}'",
     )
-    return docker_exec(container, cmd)
 
 
-def discover_interface(container, target_ip):
-    for candidate in (f"{container}-route", container):
+def sender_iface(container, gateway_ip):
+    for c in (f"{container}-route", container):
         try:
-            iface = route_iface(candidate, target_ip)
+            iface = route_iface(c, gateway_ip)
             if iface:
                 return iface
         except Exception:
             pass
-    raise RuntimeError(f"Could not discover interface for {container} towards {target_ip}")
+    raise RuntimeError(f"Could not discover sender interface for {container}")
 
 
-def discover_gateway_interface(target_ip):
-    iface = route_iface(GW_CONTAINER, target_ip)
+def gw_iface(ip):
+    iface = route_iface(GW, ip)
     if not iface:
-        raise RuntimeError(f"Could not discover gateway interface towards {target_ip}")
+        raise RuntimeError(f"Could not discover gateway interface towards {ip}")
     return iface
 
 
-def cleanup_gateway_capture():
-    docker_exec(GW_CONTAINER, f"rm -f {GW_CAPTURE_TMP} /tmp/replay_traffic_gateway.log")
+def iface_mac(container, iface):
+    mac = sh(container, f"cat /sys/class/net/{iface}/address")
+    if not mac:
+        raise RuntimeError(f"Could not read MAC for {container}:{iface}")
+    return mac.lower()
 
 
-def start_gateway_capture(iface):
-    cmd = (
-        f"nohup tcpdump -U -i {iface} -nn -s 0 not arp "
-        f"-w {GW_CAPTURE_TMP} >/tmp/replay_traffic_gateway.log 2>&1 & echo $!"
+def cleanup():
+    sh(GW, f"rm -f {PRE_TMP} {PRE_LOG} {MAIN_TMP} {MAIN_LOG}")
+
+
+def start_capture(iface, tmp, log):
+    pid = sh(
+        GW,
+        f"rm -f {tmp} {log}; nohup tcpdump -U -i {iface} -nn -s 0 "
+        f"-w {tmp} >{log} 2>&1 & echo $!",
     )
-    pid = docker_exec(GW_CONTAINER, cmd)
     if not pid:
-        raise RuntimeError("Failed to start gateway capture.")
+        raise RuntimeError(f"Could not start tcpdump on gw:{iface}")
     return pid
 
 
-def stop_gateway_capture(pid):
+def stop_capture(pid):
     if pid:
-        docker_exec(GW_CONTAINER, f"kill {pid} 2>/dev/null || true")
+        sh(GW, f"kill {pid} 2>/dev/null || true")
 
 
-def copy_gateway_capture(output_path):
-    out = Path(output_path).expanduser().resolve()
+def copy_from_gw(tmp, out):
+    out = Path(out).expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["docker", "cp", f"{GW_CONTAINER}:{GW_CAPTURE_TMP}", str(out)], check=True)
+    subprocess.run(["docker", "cp", f"{GW}:{tmp}", str(out)], check=True)
     return out
 
 
-def rewrite_pcap(pcap_in, pcap_out, rewrite_map):
-    pcap_in = Path(pcap_in).expanduser().resolve()
-    pcap_out = Path(pcap_out).expanduser().resolve()
+def rewrite_pcap(src, out, ipmap, gw_mac):
+    src, out = Path(src).resolve(), Path(out).resolve()
+    if not src.exists():
+        raise FileNotFoundError(src)
 
-    if not pcap_in.exists():
-        raise FileNotFoundError(f"PCAP not found: {pcap_in}")
-
-    print("[*] Rewriting pcap...")
-    subprocess.run(
-        [
-            "tcprewrite",
-            f"--infile={pcap_in}",
-            f"--outfile={pcap_out}",
-            f"--srcipmap={rewrite_map}",
-            f"--dstipmap={rewrite_map}",
-            "--fixcsum",
-        ],
-        check=True,
-    )
-    return pcap_out
+    subprocess.run([
+        "tcprewrite",
+        f"--infile={src}",
+        f"--outfile={out}",
+        f"--srcipmap={ipmap}",
+        f"--dstipmap={ipmap}",
+        f"--enet-dmac={gw_mac}",
+        "--fixcsum",
+    ], check=True)
+    return out
 
 
-def replay_from_namespace(container, iface, pcap_path, multiplier):
-    print("[*] Replaying from sender namespace...")
-    subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "--network", f"container:{container}",
-            "--cap-add", "NET_ADMIN",
-            "--cap-add", "NET_RAW",
-            "-v", f"{pcap_path.parent}:/work",
-            TCPREPLAY_IMAGE,
-            f"--intf1={iface}",
-            f"--multiplier={multiplier}",
-            f"/work/{pcap_path.name}",
-        ],
-        check=True,
-    )
+def pcap_count(pcap):
+    return len(rdpcap(str(pcap)))
 
 
-def next_execution_id(path):
-    gt = Path(path)
-    if not gt.exists():
+def replay(container, iface, pcap, multiplier):
+    total = pcap_count(pcap)
+    cmd = [
+        "docker", "run", "--rm",
+        "--network", f"container:{container}",
+        "--cap-add", "NET_ADMIN",
+        "--cap-add", "NET_RAW",
+        "-v", f"{pcap.parent}:/work",
+        TCPREPLAY_IMAGE,
+        f"--intf1={iface}",
+        f"--multiplier={multiplier}",
+        "--stats=1",
+        f"/work/{pcap.name}",
+    ]
+
+    print(f"[*] Replaying packets... 0/{total} 0.0%", end="", flush=True)
+
+    proc = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    last = 0
+
+    for line in proc.stdout:
+        if "Actual:" not in line or "packets" not in line:
+            continue
+        try:
+            parts = line.replace(":", " ").split()
+            last = max(last, int(parts[parts.index("Actual") + 1]))
+            pct = min(100.0, last * 100 / total) if total else 0
+            print(f"\r[*] Replaying packets... {last}/{total} {pct:.1f}%", end="", flush=True)
+        except Exception:
+            pass
+
+    rc = proc.wait()
+    print(f"\r[*] Replaying packets... {total}/{total} 100.0%")
+    if rc:
+        raise subprocess.CalledProcessError(rc, cmd)
+
+
+def next_id(path):
+    path = Path(path)
+    if not path.exists():
         return "1"
 
     max_id = 0
-    with gt.open(newline="", encoding="utf-8") as f:
+    with path.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            raw = str(row.get("execution_id", "")).strip()
-            if raw.isdigit():
-                max_id = max(max_id, int(raw))
+            x = str(row.get("execution_id", "")).strip()
+            if x.isdigit():
+                max_id = max(max_id, int(x))
     return str(max_id + 1)
 
 
-def append_ground_truth(path, row):
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    exists = out.exists()
+def append_gt(path, row):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    exists = path.exists()
 
-    with out.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=GROUND_TRUTH_FIELDS)
+    with path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=GT_FIELDS)
         if not exists:
             writer.writeheader()
         writer.writerow(row)
 
 
-def make_ground_truth_row(ground_truth_path, pcap_path, sender_row, sender_container,
-                          iface, multiplier, attack_class, start_time, end_time, status, notes):
-    attack_class = attack_class.strip()
+def gt_row(path, pcap, sender, container, iface, multiplier, attack, start, end, status, notes):
+    attack = attack.strip()
     return {
-        "execution_id": next_execution_id(ground_truth_path),
-        "sample_id": Path(pcap_path).stem,
-        "attack_class": attack_class,
-        "traffic_label": "benign" if not attack_class else "malicious",
-        "original_sender_ip": str(sender_row.get("original_ip", "")),
-        "mapped_sender_ip": str(sender_row.get("simulated_ip", "")),
-        "sender_container": sender_container,
+        "execution_id": next_id(path),
+        "sample_id": Path(pcap).stem,
+        "attack_class": attack,
+        "traffic_label": "benign" if not attack else "malicious",
+        "original_sender_ip": sender.get("original_ip", ""),
+        "mapped_sender_ip": sender.get("simulated_ip", ""),
+        "sender_container": container,
         "sender_interface": iface,
-        "replay_start_time_utc": fmt_utc(start_time),
-        "replay_end_time_utc": fmt_utc(end_time),
+        "replay_start_time_utc": utc_fmt(start),
+        "replay_end_time_utc": utc_fmt(end),
         "replay_multiplier": str(multiplier),
         "status": status,
         "notes": notes,
     }
 
 
+# ---------- filter ----------
+
+def digest(x):
+    return hashlib.sha1(bytes(x)).hexdigest()
+
+
+def noise(ip):
+    return ip.startswith(("224.", "239.")) or ip.endswith(".255")
+
+
+def first_src(pkts):
+    return next((p[IP].src for p in pkts if IP in p), None)
+
+
+def main_src(pkts):
+    counts = Counter(p[IP].src for p in pkts if IP in p and not noise(p[IP].src))
+    return counts.most_common(1)[0][0] if counts else None
+
+
+def dsts_from_sender(pkts, sender):
+    out = []
+    for p in pkts:
+        if IP in p and p[IP].src == sender and not noise(p[IP].dst) and p[IP].dst not in out:
+            out.append(p[IP].dst)
+    return out
+
+
+def filter_ip_map(orig, replayed):
+    o_sender, r_sender = first_src(orig), main_src(replayed)
+    if not o_sender or not r_sender:
+        raise RuntimeError("Could not detect sender IP for filtering.")
+
+    ipmap = {r_sender: o_sender}
+    for r_ip, o_ip in zip(dsts_from_sender(replayed, r_sender), dsts_from_sender(orig, o_sender)):
+        ipmap[r_ip] = o_ip
+    return o_sender, ipmap
+
+
+def pkt_key(p, sender, ipmap):
+    if IP not in p:
+        return None
+
+    src = ipmap.get(p[IP].src, p[IP].src)
+    dst = ipmap.get(p[IP].dst, p[IP].dst)
+    if src != sender:
+        return None
+
+    sport = dport = flags = seq = ack = dns_id = dns_name = dns_type = payload = ""
+
+    if TCP in p:
+        sport, dport = p[TCP].sport, p[TCP].dport
+        flags, seq, ack = str(p[TCP].flags), int(p[TCP].seq), int(p[TCP].ack)
+
+    if UDP in p:
+        sport, dport = p[UDP].sport, p[UDP].dport
+
+    if DNS in p:
+        dns_id = int(p[DNS].id)
+        if p[DNS].qd:
+            dns_name = bytes(p[DNS].qd.qname).decode(errors="ignore").lower().rstrip(".")
+            dns_type = int(p[DNS].qd.qtype)
+
+    if UDP in p and dport in (137, 1900):
+        payload = digest(p[UDP].payload)
+
+    return (src, dst, p[IP].proto, sport, dport, flags, seq, ack, dns_id, dns_name, dns_type, payload)
+
+
+def dup_window(k):
+    proto, dport = k[2], k[4]
+    if proto == 17 and dport == 137:
+        return 0.0002
+    if proto == 17 and dport in (5353, 5355, 1900):
+        return 0.00001
+    if proto == 17 and dport == 53:
+        return 0.002
+    if proto == 6:
+        return 0.002
+    return 0.00001
+
+
+def grouped(pkts, sender, ipmap):
+    raw = defaultdict(list)
+
+    for p in pkts:
+        k = pkt_key(p, sender, ipmap)
+        if k:
+            raw[k].append(p)
+
+    clean = {}
+    for k, ps in raw.items():
+        ps.sort(key=lambda p: float(p.time))
+        win = dup_window(k)
+        clean[k], group = [], [ps[0]]
+
+        for p in ps[1:]:
+            if float(p.time) - float(group[-1].time) <= win:
+                group.append(p)
+            else:
+                clean[k].append(group[-1])
+                group = [p]
+
+        clean[k].append(group[-1])
+
+    return clean
+
+
+def is_nbns(p):
+    return UDP in p and p[UDP].dport == 137
+
+
+def filter_pcap(original, replayed, out):
+    orig, rep = rdpcap(str(original)), rdpcap(str(replayed))
+    sender, ipmap = filter_ip_map(orig, rep)
+    pool = grouped(rep, sender, ipmap)
+
+    kept, missing = [], []
+
+    for n, p in enumerate(orig, start=1):
+        k = pkt_key(p, sender, ipmap)
+        if not k:
+            continue
+        if k not in pool or not pool[k]:
+            missing.append(n)
+            continue
+        kept.append(pool[k].pop(0) if is_nbns(p) else pool[k].pop())
+
+    kept.sort(key=lambda p: float(p.time))
+    wrpcap(str(out), kept)
+
+    print(f"[*] Clean egress created : {Path(out).resolve()}")
+    print(f"[*] Clean egress packets : {len(kept)}")
+    print(f"[*] Missing packets      : {len(missing)}")
+
+
+# ---------- main ----------
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pcap", required=True, help="Original pcap file")
+    ap.add_argument("--pcap", required=True)
     ap.add_argument("--topology", default="simulated_topology.json")
     ap.add_argument("--rewritten", default="")
     ap.add_argument("--multiplier", type=float, default=1.0)
     ap.add_argument("--ground-truth", default="ground_truth.csv")
     ap.add_argument("--attack-class", default="")
     ap.add_argument("--notes", default="")
-    ap.add_argument("--capture-out", default="replay_traffic_gateway.pcap")
+    ap.add_argument("--capture-pre-out", default="sender_capture.pcap")
+    ap.add_argument("--capture-out", default="gateway_capture.pcap")
+    ap.add_argument("--clean-out", default="gateway_egress.pcap")
+    ap.add_argument("--no-filter", action="store_true")
     args = ap.parse_args()
 
     topology = load_json(args.topology)
-    sender_row = auto_detect_sender_row(topology)
+    sender = detect_sender(topology)
 
-    original_ip = sender_row.get("original_ip")
-    simulated_ip = sender_row.get("simulated_ip")
-    service_name = sender_row.get("service_name")
-    gateway_ip = sender_row.get("gateway_ip")
-    if not all([original_ip, simulated_ip, service_name, gateway_ip]):
-        raise ValueError(f"Auto-detected sender row is incomplete: {sender_row}")
+    original_ip = sender.get("original_ip")
+    simulated_ip = sender.get("simulated_ip")
+    service = sender.get("service_name")
+    gateway_ip = sender.get("gateway_ip")
 
-    sender_container = DOCKER_PREFIX + service_name
-    rewritten_path = Path(args.rewritten or f"{Path(args.pcap).stem}_rewritten.pcap").expanduser().resolve()
-    attack_class = args.attack_class.strip()
-    traffic_label = "benign" if not attack_class else "malicious"
+    if not all([original_ip, simulated_ip, service, gateway_ip]):
+        raise ValueError(f"Incomplete sender row: {sender}")
 
-    print(f"[*] Sender original IP : {original_ip}")
-    print(f"[*] Sender simulated IP: {simulated_ip}")
-    print(f"[*] Sender container   : {sender_container}")
-    print(f"[*] Sender gateway IP  : {gateway_ip}")
-    print(f"[*] Attack class       : {attack_class or '(empty)'}")
-    print(f"[*] Traffic label      : {traffic_label}")
-    print(f"[*] Ground truth file  : {args.ground_truth}")
-    print(f"[*] Gateway capture out: {args.capture_out}")
+    attack = args.attack_class.strip()
+    label = "benign" if not attack else "malicious"
+    container = DOCKER_PREFIX + service
+    rewritten = Path(args.rewritten or f"{Path(args.pcap).stem}_rewritten.pcap").resolve()
 
-    iface = gateway_iface = capture_pid = ""
-    start_time = None
+    print(f"[*] Replay label         : {label}")
+    print(f"[*] Attack class         : {attack or '(none)'}")
+    print(f"[*] Original sender      : {original_ip}")
+    print(f"[*] Simulated sender     : {simulated_ip} ({container})")
+    print(f"[*] Multiplier           : {args.multiplier}")
+
+    iface = pre_pid = main_pid = ""
+    start = None
     status = "failed"
     notes = args.notes.strip()
 
     try:
-        iface = discover_interface(sender_container, gateway_ip)
-        print(f"[*] Sender interface   : {iface}")
+        iface = sender_iface(container, gateway_ip)
+        gwi = gw_iface(simulated_ip)
+        mac = iface_mac(GW, gwi)
 
-        gateway_iface = discover_gateway_interface(simulated_ip)
-        print(f"[*] Gateway interface  : {gateway_iface}")
+        rewritten = rewrite_pcap(args.pcap, rewritten, make_rewrite_map(topology), mac)
 
-        rewritten_path = rewrite_pcap(args.pcap, str(rewritten_path), build_rewrite_map(topology))
         ensure_tcpreplay_image()
+        cleanup()
 
-        cleanup_gateway_capture()
-        capture_pid = start_gateway_capture(gateway_iface)
-        print(f"[*] Started gateway capture on {gateway_iface} (pid={capture_pid})")
+        pre_pid = start_capture(gwi, PRE_TMP, PRE_LOG)
+        main_pid = start_capture("any", MAIN_TMP, MAIN_LOG)
 
         time.sleep(1)
-        start_time = now_utc()
-        replay_from_namespace(sender_container, iface, rewritten_path, args.multiplier)
+        start = utc_now()
+
+        replay(container, iface, rewritten, args.multiplier)
         status = "completed"
 
-    except Exception as exc:
-        err = f"replay_error={exc}"
-        notes = f"{notes}; {err}" if notes else err
+    except Exception as e:
+        notes = f"{notes}; replay_error={e}" if notes else f"replay_error={e}"
         raise
 
     finally:
-        end_time = now_utc()
-        start_time = start_time or end_time
+        end = utc_now()
+        start = start or end
 
         try:
-            if capture_pid:
-                time.sleep(1)
-                stop_gateway_capture(capture_pid)
-                print(f"[*] Stopped gateway capture pid={capture_pid}")
-                copied = copy_gateway_capture(args.capture_out)
-                print(f"[*] Gateway replay capture saved to: {copied}")
-        except Exception as exc:
-            warn = f"capture_export_error={exc}"
-            notes = f"{notes}; {warn}" if notes else warn
-            print(f"[!] Warning: {warn}")
+            time.sleep(1)
 
-        row = make_ground_truth_row(
-            args.ground_truth, args.pcap, sender_row, sender_container, iface,
-            args.multiplier, attack_class, start_time, end_time, status, notes
+            if pre_pid:
+                stop_capture(pre_pid)
+                copy_from_gw(PRE_TMP, args.capture_pre_out)
+
+            if main_pid:
+                stop_capture(main_pid)
+                main_out = copy_from_gw(MAIN_TMP, args.capture_out)
+
+                if not args.no_filter:
+                    filter_pcap(args.pcap, main_out, Path(args.clean_out).resolve())
+
+        except Exception as e:
+            notes = f"{notes}; capture_or_filter_error={e}" if notes else f"capture_or_filter_error={e}"
+            print(f"[!] Warning: {e}")
+
+        append_gt(
+            args.ground_truth,
+            gt_row(
+                args.ground_truth, args.pcap, sender, container, iface,
+                args.multiplier, args.attack_class, start, end, status, notes
+            ),
         )
-        append_ground_truth(args.ground_truth, row)
-        print(f"[*] Ground truth row appended to: {args.ground_truth}")
+
+        print(f"[*] Ground truth appended: {args.ground_truth}")
 
         try:
-            cleanup_gateway_capture()
+            cleanup()
         except Exception:
             pass
 
         try:
-            if rewritten_path.exists():
-                rewritten_path.unlink()
-                print(f"[*] Deleted temporary file: {rewritten_path}")
-        except Exception as exc:
-            print(f"[!] Warning: could not delete {rewritten_path}: {exc}")
+            if rewritten.exists():
+                rewritten.unlink()
+        except Exception:
+            pass
 
-    print("\n[+] Replay finished.")
+    print("[+] Replay finished.")
 
 
 if __name__ == "__main__":

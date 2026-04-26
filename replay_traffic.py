@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from scapy.all import rdpcap, wrpcap, IP, TCP, UDP, DNS, Ether
+
 DOCKER_PREFIX = "master-thesis-"
 TCPREPLAY_IMAGE = "local/tcpreplay"
 GW = f"{DOCKER_PREFIX}gw"
@@ -21,10 +22,10 @@ GT_FIELDS = [
 ]
 
 PROTO_DST_MAC = {
-    137: "ff:ff:ff:ff:ff:ff",  # NBNS
-    5353: "01:00:5e:00:00:fb", # mDNS
-    5355: "01:00:5e:00:00:fc", # LLMNR
-    1900: "01:00:5e:7f:ff:fa", # SSDP
+    137: "ff:ff:ff:ff:ff:ff",   # NBNS
+    5353: "01:00:5e:00:00:fb",  # mDNS
+    5355: "01:00:5e:00:00:fc",  # LLMNR
+    1900: "01:00:5e:7f:ff:fa",  # SSDP
 }
 
 
@@ -159,7 +160,7 @@ def copy_from_gw(tmp, out):
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-    )    
+    )
     print(f"[*] Copied capture       : {out.name}")
     return out
 
@@ -222,36 +223,31 @@ def replay(container, iface, pcap, multiplier):
         raise subprocess.CalledProcessError(rc, cmd)
 
 
-def next_id(path):
-    path = Path(path)
-    if not path.exists():
-        return "1"
-
-    max_id = 0
-    with path.open(newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            x = str(row.get("execution_id", "")).strip()
-            if x.isdigit():
-                max_id = max(max_id, int(x))
-    return str(max_id + 1)
-
-
 def append_gt(path, row):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    exists = path.exists()
 
-    with path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=GT_FIELDS)
-        if not exists:
-            writer.writeheader()
-        writer.writerow(row)
+    rows = []
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+    rows = [r for r in rows if r.get("sample_id") != row.get("sample_id")]
+    rows.append(row)
+
+    for i, r in enumerate(rows, start=1):
+        r["execution_id"] = str(i)
+
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=GT_FIELDS)
+        w.writeheader()
+        w.writerows(rows)
 
 
-def gt_row(path, pcap, sender, container, iface, multiplier, attack, start, end, status, notes):
+def gt_row(pcap, sender, container, iface, multiplier, attack, start, end, status, notes):
     attack = attack.strip()
     return {
-        "execution_id": next_id(path),
+        "execution_id": "",
         "sample_id": Path(pcap).stem,
         "attack_class": attack,
         "traffic_label": "benign" if not attack else "malicious",
@@ -266,8 +262,6 @@ def gt_row(path, pcap, sender, container, iface, multiplier, attack, start, end,
         "notes": notes,
     }
 
-
-# ---------- filter ----------
 
 def digest(x):
     return hashlib.sha1(bytes(x)).hexdigest()
@@ -311,6 +305,7 @@ def pkt_key(p, sender, ipmap):
 
     src = ipmap.get(p[IP].src, p[IP].src)
     dst = ipmap.get(p[IP].dst, p[IP].dst)
+
     if src != sender:
         return None
 
@@ -377,6 +372,7 @@ def grouped(pkts, sender, ipmap):
 def is_nbns(p):
     return UDP in p and p[UDP].dport == 137
 
+
 def to_ether(replay_pkt, mac_pkt):
     src = mac_pkt[Ether].src if Ether in mac_pkt else "00:00:00:00:00:00"
     dst = mac_pkt[Ether].dst if Ether in mac_pkt else "00:00:00:00:00:00"
@@ -387,6 +383,7 @@ def to_ether(replay_pkt, mac_pkt):
     q = Ether(src=src, dst=dst, type=0x0800) / replay_pkt[IP].copy()
     q.time = replay_pkt.time
     return q
+
 
 def filter_pcap(original, sender_capture, gateway_capture, out):
     orig = rdpcap(str(original))
@@ -400,7 +397,6 @@ def filter_pcap(original, sender_capture, gateway_capture, out):
     mac_pool = grouped(sender_cap, sender, sender_ipmap)
 
     kept, missing = [], []
-    #
     last_time = None
 
     for n, p in enumerate(orig, start=1):
@@ -419,31 +415,26 @@ def filter_pcap(original, sender_capture, gateway_capture, out):
         if k_mac in mac_pool and mac_pool[k_mac]:
             mac_match = mac_pool[k_mac].pop(0) if is_nbns(p) else mac_pool[k_mac].pop()
         else:
-            mac_match = p  
+            mac_match = p
 
         out_pkt = to_ether(gw_match, mac_match)
 
-        # NBNS can appear slightly earlier in replay capture.
-        # Keep original protocol/order, but avoid equal/backward timestamps.
         if last_time is not None and float(out_pkt.time) <= last_time:
             out_pkt.time = last_time + 0.000001
 
         last_time = float(out_pkt.time)
         kept.append(out_pkt)
 
-    # Convert Linux cooked capture to Ethernet.
-    # SLL2 is 20 bytes, Ethernet is 14 bytes => frame.len becomes 6 bytes smaller.
     wrpcap(str(out), kept, linktype=1)
 
     print(f"[*] Clean egress created : {Path(out).name}")
     print(f"[*] Clean egress packets : {len(kept)}")
     print(f"[*] Missing packets      : {len(missing)}")
 
-# ---------- main ----------
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pcap", default="")    
+    ap.add_argument("--pcap", default="")
     ap.add_argument("--topology", default="simulated_topology.json")
     ap.add_argument("--rewritten", default="")
     ap.add_argument("--multiplier", type=float, default=1.0)
@@ -457,7 +448,7 @@ def main():
     args = ap.parse_args()
 
     topology = load_json(args.topology)
-    sender = detect_sender(topology)
+
     if not args.pcap:
         args.pcap = topology.get("pcap_file", "")
 
@@ -465,6 +456,7 @@ def main():
         raise ValueError("No --pcap provided and topology has no pcap_file field.")
 
     args.pcap = str(Path(args.pcap).expanduser().resolve())
+    sender = detect_sender(topology)
 
     original_ip = sender.get("original_ip")
     simulated_ip = sender.get("simulated_ip")
@@ -481,6 +473,7 @@ def main():
 
     print(f"[*] Replay label         : {label}")
     print(f"[*] Attack class         : {attack or '(none)'}")
+    print(f"[*] Sample ID            : {Path(args.pcap).stem}")
     print(f"[*] Original sender      : {original_ip}")
     print(f"[*] Simulated sender     : {simulated_ip} ({container})")
     print(f"[*] Multiplier           : {args.multiplier}")
@@ -493,12 +486,11 @@ def main():
     try:
         iface = sender_iface(container, gateway_ip)
         gwi = gw_iface(simulated_ip)
+
         print(f"[*] Sender interface     : {iface}")
         print(f"[*] GW ingress interface : {gwi}")
-        mac = iface_mac(GW, gwi)
 
-
-        rewritten = rewrite_pcap(args.pcap, rewritten, make_rewrite_map(topology), mac)
+        rewritten = rewrite_pcap(args.pcap, rewritten, make_rewrite_map(topology), iface_mac(GW, gwi))
 
         ensure_tcpreplay_image()
         cleanup()
@@ -541,12 +533,12 @@ def main():
         append_gt(
             args.ground_truth,
             gt_row(
-                args.ground_truth, args.pcap, sender, container, iface,
+                args.pcap, sender, container, iface,
                 args.multiplier, args.attack_class, start, end, status, notes
             ),
         )
 
-        print(f"[*] Ground truth appended: {args.ground_truth}")
+        print(f"[*] Ground truth updated : {args.ground_truth}")
 
         try:
             cleanup()

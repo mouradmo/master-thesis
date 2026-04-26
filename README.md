@@ -86,7 +86,6 @@ python3 generate_compose.py --zones x --hosts-per-zone y,z --pcap gateway.pcap
 Run set_delay.sh
 
 ```bash
-chmod +x set_delay.sh
 ./set_delay.sh set <src_ip> <dst_ip> <delay_ms>
 
 ./set_delay.sh del <src_ip> <dst_ip>

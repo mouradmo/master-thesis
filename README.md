@@ -58,8 +58,8 @@ docker exec -it master-thesis-container sh
 Set up Python environment and install dependencies:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 ```
 
 Run the labeling script:

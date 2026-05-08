@@ -13,14 +13,14 @@ PRIVATE_NETWORKS = tuple(map(ip_network, [
     "192.168.0.0/16",
 ]))
 
-A_OCTET2_BASE = 30
+INTERNAL_ZONE = "A"
+INTERNAL_OCTET2 = 30
+EXTERNAL_START_OCTET2 = 31
+
 A_SERVER_OCTET3 = 10
 HOST_OCTET3_START = 11
+HOST_OCTET3_END = 253
 GW_HOST_OCTET4 = 254
-MAX_HOSTS_PER_ZONE = 200
-
-INTERNAL_DNS_IP = "172.30.10.53"
-INTERNAL_DNS_GW = "172.30.10.254"
 
 
 def run_tshark(args):
@@ -36,10 +36,14 @@ def tshark_fields(display_filter, *fields):
     args = []
     if display_filter:
         args += ["-Y", display_filter]
+
     args += ["-T", "fields"]
+
     for f in fields:
         args += ["-e", f]
+
     args += ["-E", "separator=,", "-E", "quote=n", "-E", "occurrence=f"]
+
     return run_tshark(args)
 
 
@@ -59,6 +63,7 @@ def extract_packets():
 
         hosts.update((src, dst))
         edges[(src, dst)]["count"] += 1
+
         if proto:
             edges[(src, dst)]["protocols"].add(proto)
 
@@ -72,34 +77,69 @@ def extract_dns_names():
     )
 
     names, seen = [], set()
+
     for line in out.splitlines():
         name = line.strip().lower().rstrip(".")
         if name and name not in seen:
             seen.add(name)
             names.append(name)
+
     return names
 
 
-def extract_dns_server_ips():
+def extract_dhcp_zero_owner():
     """
-    DNS servers are identified from actual DNS traffic:
-    - request destination IPs
-    - response source IPs
+    DHCP Discover/Request usually use:
 
-    This returns both internal and external DNS IPs.
-    External DNS IPs stay external hosts later; only internal DNS gets
-    the dedicated internal DNS mapping.
+        0.0.0.0 -> 255.255.255.255
+
+    Later DHCP Offer/ACK gives the real assigned address in bootp.yiaddr.
+
+    This function maps the special source 0.0.0.0 to the real internal
+    client IP, for example:
+
+        0.0.0.0 belongs to 10.6.13.133
+
+    The replay will still keep the packet source as 0.0.0.0, but it needs
+    to know which container should replay those packets.
     """
-    dns_ips = set()
 
-    for flt, field in [
-        ("dns.flags.response == 0 and ip.src and ip.dst", "ip.dst"),
-        ("dns.flags.response == 1 and ip.src and ip.dst", "ip.src"),
-    ]:
-        out = tshark_fields(flt, field)
-        dns_ips.update(line.strip() for line in out.splitlines() if line.strip())
+    try:
+        out = tshark_fields(
+            "bootp and ip.src and ip.dst",
+            "ip.src",
+            "ip.dst",
+            "bootp.id",
+            "bootp.yiaddr",
+        )
+    except subprocess.CalledProcessError:
+        return ""
 
-    return dns_ips
+    zero_xids = set()
+    xid_to_yiaddr = {}
+
+    for line in out.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 4:
+            continue
+
+        src, dst, xid, yiaddr = parts[:4]
+
+        if not xid:
+            continue
+
+        if src == "0.0.0.0" and dst == "255.255.255.255":
+            zero_xids.add(xid)
+
+        if yiaddr and yiaddr != "0.0.0.0":
+            xid_to_yiaddr[xid] = yiaddr
+
+    for xid in sorted(zero_xids):
+        owner = xid_to_yiaddr.get(xid, "")
+        if owner:
+            return owner
+
+    return ""
 
 
 def is_private_ip(ip):
@@ -107,21 +147,16 @@ def is_private_ip(ip):
     return any(addr in net for net in PRIVATE_NETWORKS)
 
 
-def infer_role(ip, dns_server_ips):
+def infer_role(ip):
+    if ip == "0.0.0.0":
+        return "dhcp_zero"
+
     if ip.startswith(("224.", "239.")):
         return "multicast"
-    if ip.endswith(".255"):
+
+    if ip == "255.255.255.255" or ip.endswith(".255"):
         return "broadcast"
 
-    # Internal DNS gets its own dedicated role.
-    if ip in dns_server_ips and is_private_ip(ip):
-        return "internal_dns"
-
-    # External DNS should NOT be special; keep it as an external host.
-    if ip in dns_server_ips and not is_private_ip(ip):
-        return "external_host"
-
-    # Gateway heuristic remains separate.
     if ip.endswith(".1") and is_private_ip(ip):
         return "gateway"
 
@@ -129,78 +164,116 @@ def infer_role(ip, dns_server_ips):
 
 
 def classify_for_sim(role, ip):
+    if role == "dhcp_zero":
+        return "dhcp_zero"
+
     if role in {"broadcast", "multicast"}:
         return "ignore"
+
     if role == "gateway":
         return "gateway"
-    if role == "internal_dns":
-        return "infra_dns"
+
     return "internal" if is_private_ip(ip) else "external"
 
 
-def zone_to_octet2(zone):
-    return A_OCTET2_BASE + ord(zone) - ord("A")
+def zone_label(zone_index):
+    if zone_index == 1:
+        return "A"
+    return f"Z{zone_index:04d}"
 
 
-def build_host_subnet_ips(zone, host_index):
-    if not 1 <= host_index <= MAX_HOSTS_PER_ZONE:
-        raise ValueError(f"host_index must be between 1 and {MAX_HOSTS_PER_ZONE}")
+def build_internal_host_ips(host_index):
+    """
+    Internal:
+      host 1 -> 172.30.11.11
+      host 2 -> 172.30.12.12
+    """
 
-    o2 = zone_to_octet2(zone)
     o3 = HOST_OCTET3_START + host_index - 1
-    return f"172.{o2}.{o3}.{o3}", f"172.{o2}.{o3}.{GW_HOST_OCTET4}"
+
+    if o3 > HOST_OCTET3_END:
+        raise ValueError(
+            f"Too many internal hosts. Current internal range supports "
+            f"{HOST_OCTET3_END - HOST_OCTET3_START + 1} hosts."
+        )
+
+    simulated_ip = f"172.{INTERNAL_OCTET2}.{o3}.{o3}"
+    gateway_ip = f"172.{INTERNAL_OCTET2}.{o3}.{GW_HOST_OCTET4}"
+
+    return simulated_ip, gateway_ip
+
+
+def build_external_host_ips(external_index):
+    """
+    External:
+      external 1   -> 172.31.11.11
+      external 2   -> 172.31.12.12
+      ...
+      external 243 -> 172.31.253.253
+      external 244 -> 172.32.11.11
+    """
+
+    hosts_per_octet2 = HOST_OCTET3_END - HOST_OCTET3_START + 1
+
+    block = (external_index - 1) // hosts_per_octet2
+    offset = (external_index - 1) % hosts_per_octet2
+
+    o2 = EXTERNAL_START_OCTET2 + block
+    o3 = HOST_OCTET3_START + offset
+
+    if o2 > 254:
+        raise ValueError("Too many external hosts. Ran out of 172.x.x.x ranges.")
+
+    simulated_ip = f"172.{o2}.{o3}.{o3}"
+    gateway_ip = f"172.{o2}.{o3}.{GW_HOST_OCTET4}"
+
+    return simulated_ip, gateway_ip
 
 
 def build_gateway_sim_ip():
-    return f"172.{zone_to_octet2('A')}.{A_SERVER_OCTET3}.{GW_HOST_OCTET4}"
-
-
-def external_zone_labels():
-    return [chr(c) for c in range(ord("B"), ord("Z") + 1)]
+    return f"172.{INTERNAL_OCTET2}.{A_SERVER_OCTET3}.{GW_HOST_OCTET4}"
 
 
 def assign_external_hosts(external_hosts):
-    zones = external_zone_labels()
-    total_capacity = len(zones) * MAX_HOSTS_PER_ZONE
-
-    if len(external_hosts) > total_capacity:
-        raise ValueError(
-            f"Too many external hosts ({len(external_hosts)}). "
-            f"Current topology supports at most {total_capacity} external hosts."
-        )
-
-    zone_host_counts = {z: 0 for z in zones}
     assigned = []
+    zone_labels = []
 
-    for i, host in enumerate(sorted(external_hosts, key=lambda x: x["original_ip"])):
-        zone = zones[i % len(zones)]
-        zone_host_counts[zone] += 1
-        host_index = zone_host_counts[zone]
-        simulated_ip, gateway_ip = build_host_subnet_ips(zone, host_index)
+    for external_index, host in enumerate(
+        sorted(external_hosts, key=lambda x: x["original_ip"]),
+        start=1,
+    ):
+        zone_index = external_index + 1
+        zone = zone_label(zone_index)
+
+        simulated_ip, gateway_ip = build_external_host_ips(external_index)
 
         assigned.append({
             **host,
             "zone": zone,
-            "service_name": f"{zone}_external_host_{host_index:02d}",
+            "zone_index": zone_index,
+            "service_name": f"{zone}_external_host",
             "simulated_ip": simulated_ip,
             "gateway_ip": gateway_ip,
         })
 
-    return assigned, zone_host_counts
+        zone_labels.append(zone)
+
+    return assigned, zone_labels
 
 
-def build_simulated_topology(host_rows, edge_rows, dns_names):
+def build_simulated_topology(host_rows, edge_rows, dns_names, dhcp_zero_owner):
     grouped = {
         "internal": [],
         "external": [],
         "gateway": [],
-        "infra_dns": [],
+        "dhcp_zero": [],
         "ignore": [],
     }
 
     for host in host_rows:
         ip = host["ip"]
         sim_type = classify_for_sim(host["role"], ip)
+
         grouped[sim_type].append({
             "original_ip": ip,
             "original_role": host["role"],
@@ -209,50 +282,82 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
 
     mapping = []
 
-    for i, host in enumerate(sorted(grouped["internal"], key=lambda x: x["original_ip"]), start=1):
-        simulated_ip, gateway_ip = build_host_subnet_ips("A", i)
+    for i, host in enumerate(
+        sorted(grouped["internal"], key=lambda x: x["original_ip"]),
+        start=1,
+    ):
+        simulated_ip, gateway_ip = build_internal_host_ips(i)
+
         mapping.append({
             **host,
-            "zone": "A",
+            "zone": INTERNAL_ZONE,
+            "zone_index": 1,
             "service_name": f"A_internal_host_{i:02d}",
             "simulated_ip": simulated_ip,
             "gateway_ip": gateway_ip,
         })
+
     internal_count = len(grouped["internal"])
 
-    external_assigned, external_zone_count_map = assign_external_hosts(grouped["external"])
+    external_assigned, external_zone_labels = assign_external_hosts(grouped["external"])
     mapping.extend(external_assigned)
 
-    # Keep only one mapped gateway service.
     if grouped["gateway"]:
         mapping.append({
             "original_ip": grouped["gateway"][0]["original_ip"],
             "original_role": "gateway",
             "sim_type": "gateway",
-            "zone": "A",
+            "zone": INTERNAL_ZONE,
+            "zone_index": 1,
             "service_name": "gw",
             "simulated_ip": build_gateway_sim_ip(),
             "gateway_ip": "",
         })
 
-    # Keep only one mapped internal DNS service.
-    if grouped["infra_dns"]:
-        dns_original = grouped["infra_dns"][0]["original_ip"]
-        mapping.append({
-            "original_ip": dns_original,
-            "original_role": "internal_dns",
-            "sim_type": "infra_dns",
-            "zone": "A",
-            "service_name": "dns",
-            "simulated_ip": INTERNAL_DNS_IP,
-            "gateway_ip": INTERNAL_DNS_GW,
-        })
-        print(f"internal_dns={dns_original} -> {INTERNAL_DNS_IP}")
-    else:
-        print("internal_dns=none")
+    # Special DHCP source mapping.
+    #
+    # We do NOT rewrite 0.0.0.0 to 172.x.x.x.
+    # We only attach it to the real DHCP client container, so the replay script
+    # knows which container should emit DHCP Discover/Request packets.
+    owner_row = None
 
-    service_by_ip = {m["original_ip"]: m["service_name"] for m in mapping}
-    sim_ip_by_ip = {m["original_ip"]: m["simulated_ip"] for m in mapping}
+    if dhcp_zero_owner:
+        for m in mapping:
+            if m.get("original_ip") == dhcp_zero_owner:
+                owner_row = m
+                break
+
+    if grouped["dhcp_zero"]:
+        if owner_row:
+            mapping.append({
+                "original_ip": "0.0.0.0",
+                "original_role": "dhcp_zero",
+                "sim_type": "dhcp_zero",
+                "zone": owner_row["zone"],
+                "zone_index": owner_row["zone_index"],
+                "service_name": owner_row["service_name"],
+                "simulated_ip": "0.0.0.0",
+                "gateway_ip": owner_row["gateway_ip"],
+                "dhcp_assigned_original_ip": dhcp_zero_owner,
+                "dhcp_assigned_simulated_ip": owner_row["simulated_ip"],
+            })
+
+            print(f"dhcp_zero=0.0.0.0 -> container={owner_row['service_name']} owner={dhcp_zero_owner}")
+        else:
+            grouped["ignore"].extend(grouped["dhcp_zero"])
+            print("dhcp_zero=0.0.0.0 ignored because DHCP owner could not be detected")
+
+    service_by_ip = {
+        m["original_ip"]: m["service_name"]
+        for m in mapping
+        if m.get("original_ip")
+    }
+
+    sim_ip_by_ip = {
+        m["original_ip"]: m["simulated_ip"]
+        for m in mapping
+        if m.get("original_ip")
+    }
 
     filtered_edges = [{
         "src_original_ip": edge["src"],
@@ -265,13 +370,8 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
         "protocols": edge["protocols"],
     } for edge in edge_rows]
 
-    zone_labels = ["A"]
-    hosts_per_zone = [internal_count]
-    for zone in external_zone_labels():
-        count = external_zone_count_map[zone]
-        if count > 0:
-            zone_labels.append(zone)
-            hosts_per_zone.append(count)
+    zone_labels = [INTERNAL_ZONE] + external_zone_labels
+    hosts_per_zone = [internal_count] + [1 for _ in external_zone_labels]
 
     simulated_topology = {
         "pcap_file": PCAP,
@@ -282,6 +382,7 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
         "ignored_hosts": grouped["ignore"],
         "edges": filtered_edges,
         "dns_names": dns_names,
+        "dhcp_zero_owner": dhcp_zero_owner,
     }
 
     with open("simulated_topology.json", "w") as f:
@@ -297,11 +398,13 @@ def build_simulated_topology(host_rows, edge_rows, dns_names):
 
 def main():
     hosts, edges = extract_packets()
-
     dns_names = extract_dns_names()
-    dns_server_ips = extract_dns_server_ips()
+    dhcp_zero_owner = extract_dhcp_zero_owner()
 
-    host_rows = [{"ip": ip, "role": infer_role(ip, dns_server_ips)} for ip in sorted(hosts)]
+    host_rows = [
+        {"ip": ip, "role": infer_role(ip)}
+        for ip in sorted(hosts)
+    ]
 
     edge_rows = [{
         "src": src,
@@ -315,14 +418,20 @@ def main():
         "hosts": host_rows,
         "edges": edge_rows,
         "dns_names": dns_names,
-        "dns_server_ips": sorted(dns_server_ips),
+        "dhcp_zero_owner": dhcp_zero_owner,
     }
 
     with open("topology.json", "w") as f:
         json.dump(topology, f, indent=2)
 
     print("Wrote topology.json")
-    build_simulated_topology(host_rows, edge_rows, dns_names)
+
+    if dhcp_zero_owner:
+        print(f"Detected DHCP 0.0.0.0 owner: {dhcp_zero_owner}")
+    else:
+        print("Detected DHCP 0.0.0.0 owner: none")
+
+    build_simulated_topology(host_rows, edge_rows, dns_names, dhcp_zero_owner)
 
 
 if __name__ == "__main__":

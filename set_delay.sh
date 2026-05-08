@@ -12,8 +12,8 @@ usage() {
   exit 1
 }
 
-gw() { docker exec -u 0 "$GW" sh -lc "$1"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
+gw() { docker exec -u 0 "$GW" sh -lc "$1"; }
 
 command -v docker >/dev/null 2>&1 || die "docker not found"
 docker ps --format '{{.Names}}' | grep -qx "$GW" || die "Gateway '$GW' not running"
@@ -44,28 +44,27 @@ ip_exists() {
 validate_pair() {
   valid_ip "$SRC" || die "invalid source IP: $SRC"
   valid_ip "$DST" || die "invalid destination IP: $DST"
-  [ "$SRC" != "$DST" ] || die "source and destination IP cannot be the same: $SRC"
-  ip_exists "$SRC" || die "source IP does not exist in running containers: $SRC"
-  ip_exists "$DST" || die "destination IP does not exist in running containers: $DST"
+  [ "$SRC" != "$DST" ] || die "source and destination IP cannot be same"
+  ip_exists "$SRC" || die "source IP does not exist: $SRC"
+  ip_exists "$DST" || die "destination IP does not exist: $DST"
 
   if [ "$cmd" = "set" ]; then
-    [[ "$DELAY" =~ ^[0-9]+$ ]] || die "delay must be an integer in milliseconds: $DELAY"
+    [[ "$DELAY" =~ ^[0-9]+$ ]] || die "delay must be integer ms"
   fi
 }
 
 list_rules() {
   echo "--- $GW"
   gw '
-    command -v tc >/dev/null 2>&1 || exit 0
     for d in /sys/class/net/eth*; do
       [ -e "$d" ] || continue
       dev="${d##*/}"
+      echo
       echo "dev=$dev"
-      tc qdisc show dev "$dev" || true
-      tc class show dev "$dev" 2>/dev/null || true
-      tc filter show dev "$dev" parent 1: 2>/dev/null || true
+      tc -s qdisc show dev "$dev" || true
+      tc -s class show dev "$dev" 2>/dev/null || true
+      tc -s filter show dev "$dev" parent 1: 2>/dev/null || true
     done
-    echo
   '
 }
 
@@ -81,16 +80,17 @@ DST='$DST'
 DELAY='$DELAY'
 
 egress_dev() {
-  ip route get \"\$1\" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if(\$i==\"dev\"){print \$(i+1); exit}}'
+  ip route get \"\$1\" 2>/dev/null |
+    awk '{for(i=1;i<=NF;i++) if(\$i==\"dev\"){print \$(i+1); exit}}'
 }
 
 mark_dir() {
   cksum_val=\$(printf '%s->%s' \"\$1\" \"\$2\" | cksum | awk '{print \$1}')
-  echo \$(( (cksum_val % 4095) + 1 ))
+  echo \$(( (cksum_val % 4094) + 2 ))
 }
 
 dev=\$(egress_dev \"\$DST\")
-[ -n \"\$dev\" ] || { echo \"ERROR: cannot find gateway egress interface for dst=\$DST\" >&2; exit 1; }
+[ -n \"\$dev\" ] || { echo \"ERROR: cannot find egress dev for \$DST\" >&2; exit 1; }
 
 mark=\$(mark_dir \"\$SRC\" \"\$DST\")
 classid=\"1:\$mark\"
@@ -116,11 +116,13 @@ if [ \"\$CMD\" = set ]; then
     flowid \"\$classid\"
 
   echo \"OK: gateway delay \$SRC -> \$DST = \${DELAY}ms on \$dev\"
+  echo \"Check counters with: ./set_delay.sh list\"
+
 else
   tc filter del dev \"\$dev\" parent 1: protocol ip prio \"\$mark\" u32 2>/dev/null || true
   tc qdisc del dev \"\$dev\" parent \"\$classid\" handle \"\$handle\" 2>/dev/null || true
   tc class del dev \"\$dev\" classid \"\$classid\" 2>/dev/null || true
 
-  echo \"OK: removed gateway delay \$SRC -> \$DST\"
+  echo \"OK: removed gateway delay \$SRC -> \$DST on \$dev\"
 fi
 "

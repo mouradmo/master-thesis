@@ -623,9 +623,59 @@ def suppress_noise(containers):
         except Exception:
             pass
 
+def load_gateway_delays():
+    """Read configured one-way delay rules from the gateway container."""
+    delays = {}
+
+    try:
+        out = sh(
+            GW,
+            "for f in /tmp/replay_delay_rules/*.ms; do "
+            "[ -e \"$f\" ] || continue; "
+            "name=$(basename \"$f\" .ms); "
+            "delay=$(cat \"$f\"); "
+            "echo \"$name $delay\"; "
+            "done"
+        )
+    except Exception:
+        return delays
+
+    for line in out.splitlines():
+        try:
+            pair, delay_ms = line.strip().split()
+            src, dst = pair.split("__", 1)
+            delays[(src, dst)] = float(delay_ms) / 1000.0
+        except Exception:
+            continue
+
+    return delays
+
+def packet_direction(pkt):
+    if IP in pkt:
+        return pkt[IP].src, pkt[IP].dst
+    if ARP in pkt:
+        return pkt[ARP].psrc, pkt[ARP].pdst
+    return None
+
+
+def gateway_delay_seconds(src, dst, cache):
+    key = (src, dst)
+    if key in cache:
+        return cache[key]
+
+    path = f"/tmp/replay_delay_rules/{src}__{dst}.ms"
+
+    try:
+        out = sh(GW, f"cat {path} 2>/dev/null || true").strip()
+        delay = float(out) / 1000.0 if out else 0.0
+    except Exception:
+        delay = 0.0
+
+    cache[key] = delay
+    return delay
 
 def replay(pcap, packets, meta, multiplier, workdir):
-    """Replay packets with original timing scaled by the multiplier."""
+    """Replay packets with original timing, plus configured one-way delay on direction changes."""
     write_sender(workdir)
 
     containers = sorted({m["container"] for m in meta if m["replay"]})
@@ -633,12 +683,38 @@ def replay(pcap, packets, meta, multiplier, workdir):
     senders = {c: start_sender(c, workdir, pcap.name) for c in containers}
 
     mult = multiplier if multiplier and multiplier > 0 else 1.0
-    last = None
     sent = skipped = 0
     t0 = time.monotonic()
 
     total = len(packets)
     last_progress = -1
+
+    last_ts = None
+    last_dir = None
+    delay_cache = {}
+
+    def packet_direction(pkt):
+        if IP in pkt:
+            return pkt[IP].src, pkt[IP].dst
+        if ARP in pkt:
+            return pkt[ARP].psrc, pkt[ARP].pdst
+        return None
+
+    def gateway_delay_seconds(src, dst):
+        key = (src, dst)
+        if key in delay_cache:
+            return delay_cache[key]
+
+        path = f"/tmp/replay_delay_rules/{src}__{dst}.ms"
+
+        try:
+            out = sh(GW, f"cat {path} 2>/dev/null || true").strip()
+            delay_seconds = float(out) / 1000.0 if out else 0.0
+        except Exception:
+            delay_seconds = 0.0
+
+        delay_cache[key] = delay_seconds
+        return delay_seconds
 
     try:
         print("[*] Starting live replay : ARP/IP all protocols")
@@ -646,31 +722,30 @@ def replay(pcap, packets, meta, multiplier, workdir):
         for i, pkt in enumerate(packets):
             progress = int(((i + 1) / total) * 100)
 
-            # update same console line only
             if progress != last_progress:
-                print(
-                    f"\r[*] Replay progress      : {progress:3d}%",
-                    end="",
-                    flush=True
-                )
+                print(f"\r[*] Replay progress      : {progress:3d}%", end="", flush=True)
                 last_progress = progress
 
-            ts = float(pkt.time)
+            curr_ts = float(pkt.time)
+            curr_dir = packet_direction(pkt)
 
-            if last is not None:
-                time.sleep(max(0.0, (ts - last) / mult))
+            if last_ts is not None:
+                original_gap = max(0.0, (curr_ts - last_ts) / mult)
+                extra_delay = 0.0
+
+                if curr_dir and last_dir and curr_dir != last_dir:
+                    extra_delay = gateway_delay_seconds(last_dir[0], last_dir[1])
+
+                time.sleep(original_gap + extra_delay)
 
             if meta[i]["replay"]:
-                send_pkt(
-                    senders[meta[i]["container"]],
-                    i,
-                    meta[i]["iface"]
-                )
+                send_pkt(senders[meta[i]["container"]], i, meta[i]["iface"])
                 sent += 1
             else:
                 skipped += 1
 
-            last = ts
+            last_ts = curr_ts
+            last_dir = curr_dir
 
         print()
 
@@ -998,6 +1073,7 @@ def parse_args():
     ap.add_argument("--allow-missing-fallback", action="store_true")
     ap.add_argument("--no-filter", action="store_true")
     ap.add_argument("--post-capture-wait", type=float, default=2.0)
+    
     return ap.parse_args()
 
 

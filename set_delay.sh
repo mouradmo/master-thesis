@@ -114,7 +114,9 @@ if [ \"\$CMD\" = set ]; then
     match ip src \"\$SRC\"/32 \
     match ip dst \"\$DST\"/32 \
     flowid \"\$classid\"
-
+  
+  mkdir -p /tmp/replay_delay_rules
+  echo "\$DELAY" > "/tmp/replay_delay_rules/\${SRC}__\${DST}.ms"
   echo \"OK: gateway delay \$SRC -> \$DST = \${DELAY}ms on \$dev\"
   echo \"Check counters with: ./set_delay.sh list\"
 
@@ -124,5 +126,6 @@ else
   tc class del dev \"\$dev\" classid \"\$classid\" 2>/dev/null || true
 
   echo \"OK: removed gateway delay \$SRC -> \$DST on \$dev\"
+  rm -f "/tmp/replay_delay_rules/\${SRC}__\${DST}.ms"
 fi
 "

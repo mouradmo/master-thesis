@@ -118,7 +118,6 @@ if [ \"\$CMD\" = set ]; then
   mkdir -p /tmp/replay_delay_rules
   echo "\$DELAY" > "/tmp/replay_delay_rules/\${SRC}__\${DST}.ms"
   echo \"OK: gateway delay \$SRC -> \$DST = \${DELAY}ms on \$dev\"
-  echo \"Check counters with: ./set_delay.sh list\"
 
 else
   tc filter del dev \"\$dev\" parent 1: protocol ip prio \"\$mark\" u32 2>/dev/null || true

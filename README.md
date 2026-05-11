@@ -119,3 +119,4 @@ Run replay traffic
 python3 replay_traffic.py --pcap 57627_dump.pcap --multiplier 1.0 --attack_class name
 ```
 
+ docker exec -it master-thesis-gw sh -lc 'ls -l /tmp/replay_delay_rules && cat /tmp/replay_delay_rules/*'

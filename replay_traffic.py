@@ -41,7 +41,7 @@ PROTO_MAC = {
 # Ground-truth CSV columns.
 GT_FIELDS = [
     "execution_id", "sample_id", "attack_class", "traffic_label",
-    "sender_count", "sender_containers", "sender_interfaces",
+    "sender_count",
     "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
     "status", "notes",
 ]
@@ -833,8 +833,6 @@ def gt_row(pcap, meta, multiplier, attack, start, end, status, notes):
         "attack_class": attack,
         "traffic_label": "benign" if not attack else "malicious",
         "sender_count": str(len(containers)),
-        "sender_containers": json.dumps(containers),
-        "sender_interfaces": json.dumps(interfaces),
         "replay_start_time_utc": utc(start),
         "replay_end_time_utc": utc(end),
         "replay_multiplier": str(multiplier),

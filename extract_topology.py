@@ -157,8 +157,6 @@ def infer_role(ip):
     if ip == "255.255.255.255" or ip.endswith(".255"):
         return "broadcast"
 
-    if ip.endswith(".1") and is_private_ip(ip):
-        return "gateway"
 
     return "internal_host" if is_private_ip(ip) else "external_host"
 
@@ -169,9 +167,6 @@ def classify_for_sim(role, ip):
 
     if role in {"broadcast", "multicast"}:
         return "ignore"
-
-    if role == "gateway":
-        return "gateway"
 
     return "internal" if is_private_ip(ip) else "external"
 
@@ -228,10 +223,6 @@ def build_external_host_ips(external_index):
     gateway_ip = f"172.{o2}.{o3}.{GW_HOST_OCTET4}"
 
     return simulated_ip, gateway_ip
-
-
-def build_gateway_sim_ip():
-    return f"172.{INTERNAL_OCTET2}.{A_SERVER_OCTET3}.{GW_HOST_OCTET4}"
 
 
 def assign_external_hosts(external_hosts):
@@ -301,18 +292,6 @@ def build_simulated_topology(host_rows, edge_rows, dns_names, dhcp_zero_owner):
 
     external_assigned, external_zone_labels = assign_external_hosts(grouped["external"])
     mapping.extend(external_assigned)
-
-    if grouped["gateway"]:
-        mapping.append({
-            "original_ip": grouped["gateway"][0]["original_ip"],
-            "original_role": "gateway",
-            "sim_type": "gateway",
-            "zone": INTERNAL_ZONE,
-            "zone_index": 1,
-            "service_name": "gw",
-            "simulated_ip": build_gateway_sim_ip(),
-            "gateway_ip": "",
-        })
 
     # Special DHCP source mapping.
     #

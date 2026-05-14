@@ -37,21 +37,29 @@ def zeek_ts_to_datetime(ts_value) -> datetime:
 
 def label_record(rec: dict, gt_rows: list):
     ts = zeek_ts_to_datetime(rec["ts"])
-    orig_h = rec.get("id.orig_h", "")
+
+    duration = rec.get("duration", "")
+    try:
+        dur = float(duration) if duration not in ("", "-") else 0.0
+    except Exception:
+        dur = 0.0
+
+    flow_start = ts
+    flow_end = datetime.fromtimestamp(float(rec["ts"]) + dur, tz=timezone.utc)
 
     for gt in gt_rows:
-        sender_ip = gt.get("mapped_sender_ip", "")
+        # overlap between Zeek flow time and replay execution time
+        overlaps = flow_start <= gt["end_dt"] and flow_end >= gt["start_dt"]
 
-        if not (gt["start_dt"] <= ts <= gt["end_dt"]):
+        if not overlaps:
             continue
 
-        if orig_h == sender_ip:
-            return {
-                "label": gt.get("traffic_label", "malicious"),
-                "attack_class": gt.get("attack_class", ""),
-                "execution_id": gt.get("execution_id", ""),
-                "sample_id": gt.get("sample_id", ""),
-            }
+        return {
+            "label": gt.get("traffic_label", "malicious"),
+            "attack_class": gt.get("attack_class", ""),
+            "execution_id": gt.get("execution_id", ""),
+            "sample_id": gt.get("sample_id", ""),
+        }
 
     return {
         "label": "benign",
@@ -59,7 +67,6 @@ def label_record(rec: dict, gt_rows: list):
         "execution_id": "",
         "sample_id": "",
     }
-
 
 def main():
     if len(sys.argv) != 4:

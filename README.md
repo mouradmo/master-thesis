@@ -120,3 +120,7 @@ python3 replay_traffic.py --pcap 57627_dump.pcap --multiplier 1.0 --attack_class
 ```
 
  docker exec -it master-thesis-gw sh -lc 'ls -l /tmp/replay_delay_rules && cat /tmp/replay_delay_rules/*'
+
+ ## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.

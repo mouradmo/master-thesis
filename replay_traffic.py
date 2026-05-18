@@ -40,9 +40,14 @@ PROTO_MAC = {
 
 # Ground-truth CSV columns.
 GT_FIELDS = [
-    "execution_id", "sample_id", "attack_class", "traffic_label",
-    "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
-    "status", "notes",
+    "execution_id",
+    "sample_id",
+    "traffic_label",
+    "replay_start_time_utc",
+    "replay_end_time_utc",
+    "replay_multiplier",
+    "status",
+    "notes",
 ]
 
 
@@ -821,16 +826,11 @@ def append_gt(path, row):
         w.writerows(rows)
 
 
-def gt_row(pcap, meta, multiplier, attack, start, end, status, notes):
+def gt_row(pcap, multiplier, label, start, end, status, notes):
     # Create one ground-truth row for this replay run.
-    containers = sorted({m["container"] for m in meta})
-    interfaces = sorted({f'{m["container"]}:{m["iface"]}' for m in meta})
-    attack = attack.strip()
-
     return {
         "sample_id": Path(pcap).stem,
-        "attack_class": attack,
-        "traffic_label": "benign" if not attack else "malicious",
+        "traffic_label": label,
         "replay_start_time_utc": utc(start),
         "replay_end_time_utc": utc(end),
         "replay_multiplier": str(multiplier),
@@ -843,9 +843,9 @@ def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcap", default="")
     ap.add_argument("--topology", default="simulated_topology.json")
+    ap.add_argument("--label", required=True, choices=["benign", "malicious"])
     ap.add_argument("--multiplier", type=float, default=1.0)
     ap.add_argument("--ground-truth", default="ground_truth.csv")
-    ap.add_argument("--attack-class", default="")
     ap.add_argument("--notes", default="")
     ap.add_argument("--capture-out", default="gateway_capture_any.pcap")
     ap.add_argument("--clean-out", default="gateway_egress.pcap")
@@ -932,7 +932,7 @@ def main():
             print(f"[!] Warning: {e}")
 
         # Always update ground-truth metadata.
-        append_gt(args.ground_truth, gt_row(str(original), meta, args.multiplier, args.attack_class, start, end, status, notes))
+        append_gt(args.ground_truth, gt_row(str(original), args.multiplier, args.label, start, end, status, notes))
         print(f"[*] Ground truth updated : {args.ground_truth}")
         gw_cleanup()
 

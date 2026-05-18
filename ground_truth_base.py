@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 GT_FIELDS = [
-    "execution_id", "sample_id", "attack_class", "traffic_label",
+    "execution_id", "sample_id", "traffic_label",
     "sender_containers", "sender_interfaces",
     "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
     "status", "notes",
@@ -55,7 +55,6 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcaps", nargs="+", required=True)
     ap.add_argument("--label", required=True, choices=["benign", "malicious"])
-    ap.add_argument("--attack-class", default="")
     ap.add_argument("--ground-truth", default="ground_truth.csv")
     ap.add_argument("--notes", default="original_pcap")
     args = ap.parse_args()
@@ -67,12 +66,9 @@ def main():
         pcap = Path(p)
         start, end = pcap_time_window(pcap)
 
-        attack = args.attack_class.strip() if args.label == "malicious" else ""
-
         rows.append({
             "execution_id": str(next_id),
             "sample_id": f"{pcap.stem}_base",
-            "attack_class": attack,
             "traffic_label": args.label,
             "replay_start_time_utc": start,
             "replay_end_time_utc": end,

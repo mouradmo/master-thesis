@@ -97,7 +97,6 @@ def main():
                 "flow_row": i,
                 "uid": row.get("uid", ""),
                 "label": row.get("label", ""),
-                "attack_class": row.get("attack_class", ""),
                 "sample_id": row.get("sample_id", ""),
                 "ts": row.get("ts", ""),
                 "duration": row.get("duration", ""),
@@ -141,7 +140,6 @@ def main():
                 "flow_row": "",
                 "uid": "",
                 "label": "unmatched",
-                "attack_class": "",
                 "sample_id": "",
                 "ts": "",
                 "duration": "",
@@ -150,7 +148,7 @@ def main():
     fieldnames = [
         "packet_no", "packet_time", "packet_src", "packet_dst",
         "proto", "src_port", "dst_port",
-        "flow_row", "uid", "label", "attack_class",
+        "flow_row", "uid", "label", 
         "sample_id", "ts", "duration",
     ]
 

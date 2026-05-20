@@ -42,11 +42,12 @@ The framework is designed for controlled research experiments. It does not requi
 | `extract_topology.py` | Reads an input PCAP with `tshark`, extracts hosts, edges, DNS names, DHCP metadata, and writes `topology.json` and `simulated_topology.json`. |
 | `generate_compose.py` | Builds `docker-compose.yml` from `simulated_topology.json`. |
 | `replay_traffic.py` | Rewrites the original PCAP into the simulated topology, replays it, captures gateway traffic, cleans captures, and appends replay metadata to `ground_truth.csv`. |
-| `ground_truth_original.py` | Adds ground-truth rows for original PCAPs without replaying them. |
+| `ground_truth_base.py` | Adds ground-truth rows for original PCAPs without replaying them. |
 | `label_zeek.py` | Labels Zeek `conn.log` JSON records using `ground_truth.csv`. |
 | `map_packets_to_flows.py` | Maps packets from a PCAP to labeled Zeek flows. |
 | `merge_datasets.py` | Merges all `labeled_conn_*.csv` files into `merged_dataset.csv`. |
 | `train_xgboost.py` | Trains a simple binary XGBoost baseline on `merged_dataset.csv`. |
+| `run_pipeline.py` | Interactive end-to-end pipeline for base labelling, replay, optional delay setup, Zeek labelling, dataset merging, and ML training. |
 | `set_delay.sh` | Adds, removes, or lists gateway delay rules between two simulated IPs. |
 | `ground_truth.csv` | Current ground-truth metadata file. |
 | `README.md` | Project usage documentation. |
@@ -102,6 +103,15 @@ original PCAP
   -> optionally map packets to flows
   -> merge datasets
   -> train ML baseline
+```
+## Interactive Pipeline
+
+Instead of running every script manually, `run_pipeline.py` provides an interactive workflow for the full PCAP-to-ML pipeline.
+
+Run:
+
+```bash
+python3 run_pipeline.py
 ```
 
 ## 1. Extract Topology from a PCAP
@@ -271,7 +281,6 @@ Meaning:
 |---|---|
 | `execution_id` | Sequential experiment row ID. |
 | `sample_id` | Sample name, usually based on the PCAP filename. Replayed samples are versioned automatically. |
-| `attack_class` | Attack family or scenario name. Empty for benign traffic. |
 | `traffic_label` | `benign` or `malicious`. |
 | `replay_start_time_utc` | UTC start time used for labeling. |
 | `replay_end_time_utc` | UTC end time used for labeling. |
@@ -284,7 +293,7 @@ Meaning:
 Use this when you want to label original PCAPs directly without replaying them:
 
 ```bash
-python3 ground_truth_original.py \
+python3 ground_truth_base.py \
   --pcaps <pcap1> <pcap2> \
   --label benign \
   --ground-truth ground_truth.csv
@@ -293,7 +302,7 @@ python3 ground_truth_original.py \
 For malicious original PCAPs:
 
 ```bash
-python3 ground_truth_original.py \
+python3 ground_truth_base.py \
   --pcaps malware_sample.pcap \
   --label malicious \
   --attack-class "malware traffic" \

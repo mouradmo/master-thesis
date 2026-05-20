@@ -6,15 +6,24 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 GT_FIELDS = [
-    "execution_id", "sample_id", "traffic_label",
-    "sender_containers", "sender_interfaces",
-    "replay_start_time_utc", "replay_end_time_utc", "replay_multiplier",
-    "status", "notes",
+    "execution_id",
+    "sample_id",
+    "traffic_label",
+    "replay_start_time_utc",
+    "replay_end_time_utc",
+    "replay_multiplier",
+    "status",
+    "notes",
 ]
 
 
 def run(cmd):
-    return subprocess.run(cmd, text=True, capture_output=True, check=True).stdout.strip()
+    return subprocess.run(
+        [str(x) for x in cmd],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
 
 
 def utc_from_epoch(ts):
@@ -63,7 +72,7 @@ def main():
     next_id = len(rows) + 1
 
     for p in args.pcaps:
-        pcap = Path(p)
+        pcap = Path(p).expanduser().resolve()
         start, end = pcap_time_window(pcap)
 
         rows.append({
@@ -74,11 +83,14 @@ def main():
             "replay_end_time_utc": end,
             "replay_multiplier": "1.0",
             "status": "completed",
-            "notes": "original_pcap",
+            "notes": args.notes,
         })
 
         print(f"[+] Added {pcap.name}: {args.label}, {start} -> {end}")
         next_id += 1
+
+    for i, row in enumerate(rows, 1):
+        row["execution_id"] = str(i)
 
     write_rows(args.ground_truth, rows)
     print(f"[*] Ground truth updated: {args.ground_truth}")

@@ -56,14 +56,12 @@ def label_record(rec: dict, gt_rows: list):
 
         return {
             "label": gt.get("traffic_label", "malicious"),
-            "attack_class": gt.get("attack_class", ""),
             "execution_id": gt.get("execution_id", ""),
             "sample_id": gt.get("sample_id", ""),
         }
 
     return {
         "label": "benign",
-        "attack_class": "",
         "execution_id": "",
         "sample_id": "",
     }

@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from xgboost import XGBClassifier
 
-# Load dataset
-df = pd.read_csv("merged_dataset.csv")
+train_df = pd.read_csv("train_dataset.csv")
+test_df = pd.read_csv("test_dataset.csv")
 
-# Numeric ML features
 features = [
     "duration",
     "orig_bytes",
@@ -21,22 +19,12 @@ features = [
     "ip_proto",
 ]
 
-# Replace NaN with 0
-X = df[features].fillna(0)
+X_train = train_df[features].fillna(0)
+y_train = (train_df["label"] != "benign").astype(int)
 
-# Labels
-y = (df["label"] != "benign").astype(int)
+X_test = test_df[features].fillna(0)
+y_test = (test_df["label"] != "benign").astype(int)
 
-# Train/test split
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.3,
-    random_state=42,
-    stratify=y,
-)
-
-# Train model
 model = XGBClassifier(
     n_estimators=100,
     max_depth=4,
@@ -46,8 +34,6 @@ model = XGBClassifier(
 
 model.fit(X_train, y_train)
 
-# Predict
 pred = model.predict(X_test)
 
-# Results
 print(classification_report(y_test, pred))

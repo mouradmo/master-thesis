@@ -29,8 +29,16 @@ print(merged.shape)
 print("\nLabels:")
 print(merged["label"].value_counts(dropna=False))
 
-# Save merged dataset
-out = "merged_dataset.csv"
+# Ask if this is train or test dataset
+dataset_type = input(
+    "Create dataset for train or test? [train/test]: "
+).strip().lower()
+
+if dataset_type not in {"train", "test"}:
+    raise SystemExit("Please choose 'train' or 'test'")
+
+# Save dataset
+out = f"{dataset_type}_dataset.csv"
 merged.to_csv(out, index=False)
 
 print(f"\nSaved -> {out}")

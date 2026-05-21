@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import json
+import shutil
 import subprocess
 import sys
+import random
 
 GT = "ground_truth.csv"
 
@@ -32,6 +34,48 @@ def ask_choice(msg, choices, aliases=None):
         print("Choose:", ", ".join(sorted(choices | set(aliases.keys()))))
 
 
+def cleanup_experiment_files():
+    """
+    Keep only important experiment outputs:
+      - labeled_conn_*.csv
+      - gateway_egress_*.pcap
+      - ground_truth.csv
+
+    Delete temporary/debug files.
+    """
+
+    files_to_delete = [
+        "docker-compose.yml",
+        "topology.json",
+        "simulated_topology.json",
+        "gateway_capture_any.pcap",
+        "gateway.pcap",
+    ]
+
+    patterns_to_delete = [
+        "gateway_iface_*.pcap",
+        "zeek_gateway_egress_*",
+        "zeek_*_base",
+    ]
+
+    for name in files_to_delete:
+        p = Path(name)
+        if p.exists():
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
+            print(f"[-] Removed {p}")
+
+    for pattern in patterns_to_delete:
+        for p in Path(".").glob(pattern):
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
+            print(f"[-] Removed {p}")
+
+
 def zeek_and_label(pcap, out_csv):
     pcap = Path(pcap).resolve()
     zeek_dir = Path(f"zeek_{pcap.stem}")
@@ -56,17 +100,22 @@ def process_base():
         {"b": "benign", "m": "malicious"},
     )
 
-    run([
-        "python3", "ground_truth_base.py",
-        "--pcaps", pcap,
-        "--label", label,
-        "--ground-truth", GT,
-    ])
-
     out_csv = f"labeled_conn_{pcap.stem}_base.csv"
-    zeek_and_label(pcap, out_csv)
 
-    print(f"[+] Done base -> {out_csv}")
+    try:
+        run([
+            "python3", "ground_truth_base.py",
+            "--pcaps", pcap,
+            "--label", label,
+            "--ground-truth", GT,
+        ])
+
+        zeek_and_label(pcap, out_csv)
+
+        print(f"[+] Done base -> {out_csv}")
+
+    finally:
+        cleanup_experiment_files()
 
 
 def load_simulated_hosts(path="simulated_topology.json"):
@@ -122,8 +171,14 @@ def print_possible_delays():
 
 
 def maybe_apply_delay():
+    hosts = load_simulated_hosts()
+
+    if not hosts:
+        print("[!] No simulated hosts found for delay selection.")
+        return
+
     use_delay = ask_choice(
-        "Apply gateway delay before replay? yes(y) / no(n)",
+        "Apply random gateway delays before replay? yes(y) / no(n)",
         {"yes", "no"},
         {"y": "yes", "n": "no"},
     )
@@ -133,23 +188,60 @@ def maybe_apply_delay():
 
     print_possible_delays()
 
-    while True:
-        src = ask("Delay source simulated IP")
-        dst = ask("Delay destination simulated IP")
-        ms = ask("Delay in milliseconds", "100")
+    max_pairs = len(hosts) * (len(hosts) - 1)
 
-        run(["./set_delay.sh", "set", src, dst, ms])
+    try:
+        count = int(ask("How many random delay rules?", "1"))
+    except ValueError:
+        raise SystemExit("Delay count must be a number")
 
-        more = ask_choice(
-            "Add another delay rule? yes(y) / no(n)",
-            {"yes", "no"},
-            {"y": "yes", "n": "no"},
-        )
+    if count < 1:
+        return
 
-        if more == "no":
-            break
+    if count > max_pairs:
+        raise SystemExit(f"Too many delays. Maximum possible is {max_pairs}")
 
-    run(["./set_delay.sh", "list"])
+    min_delay = int(ask("Minimum delay in ms", "50"))
+    max_delay = int(ask("Maximum delay in ms", "1000"))
+
+    if min_delay < 0 or max_delay < min_delay:
+        raise SystemExit("Invalid delay range")
+
+    possible_pairs = []
+
+    for src in hosts:
+        for dst in hosts:
+            if src["simulated_ip"] == dst["simulated_ip"]:
+                continue
+
+            possible_pairs.append(
+                (src["simulated_ip"], dst["simulated_ip"])
+            )
+
+    selected_pairs = random.sample(possible_pairs, count)
+
+    print("\nRandom delays selected:")
+
+    for src, dst in selected_pairs:
+        delay_ms = random.randint(min_delay, max_delay)
+
+        print(f"  {src} -> {dst} = {delay_ms}ms")
+
+        run([
+            "./set_delay.sh",
+            "set",
+            src,
+            dst,
+            str(delay_ms),
+        ])
+
+
+def stop_docker_topology():
+    if Path("docker-compose.yml").exists():
+        try:
+            run(["docker", "compose", "down", "-v", "--remove-orphans"])
+        except subprocess.CalledProcessError:
+            print("[!] Docker cleanup failed, continuing file cleanup.")
 
 
 def process_replay():
@@ -164,44 +256,37 @@ def process_replay():
     clean_pcap = f"gateway_egress_{pcap.stem}_sim.pcap"
     labeled_csv = f"labeled_conn_{pcap.stem}_sim.csv"
 
-    run(["python3", "extract_topology.py", pcap])
-
-    run([
-        "python3", "generate_compose.py",
-        "--topology", "simulated_topology.json",
-        "--pcap", "gateway.pcap",
-        "--out", "docker-compose.yml",
-    ])
-
-    run(["docker", "compose", "up", "-d"])
-
     try:
+        run(["python3", "extract_topology.py", pcap])
+
+        run([
+            "python3", "generate_compose.py",
+            "--topology", "simulated_topology.json",
+            "--pcap", "gateway.pcap",
+            "--out", "docker-compose.yml",
+        ])
+
+        run(["docker", "compose", "up", "-d"])
+
         maybe_apply_delay()
 
-        replay_cmd = [
+        run([
             "python3", "replay_traffic.py",
             "--pcap", pcap,
             "--topology", "simulated_topology.json",
             "--ground-truth", GT,
             "--clean-out", clean_pcap,
             "--label", label,
-        ]
-
-        run(replay_cmd)
+        ])
 
         zeek_and_label(clean_pcap, labeled_csv)
 
         print(f"[+] Done replay -> {labeled_csv}")
+        print(f"[+] Kept cleaned PCAP -> {clean_pcap}")
 
     finally:
-        down = ask_choice(
-            "Stop Docker topology now? yes(y) / no(n)",
-            {"yes", "no"},
-            {"y": "yes", "n": "no"},
-        )
-
-        if down == "yes":
-            run(["docker", "compose", "down", "-v", "--remove-orphans"])
+        stop_docker_topology()
+        cleanup_experiment_files()
 
 
 def merge_only():
@@ -213,7 +298,13 @@ def train_only():
 
 
 def merge_and_train():
+    print("\n=== Create TRAIN dataset ===")
     merge_only()
+
+    print("\n=== Create TEST dataset ===")
+    merge_only()
+
+    print("\n=== Train and evaluate model ===")
     train_only()
 
 
@@ -222,14 +313,14 @@ def main():
     print("Commands:")
     print("  base(b)    = label original PCAP directly")
     print("  replay(r)  = replay PCAP in simulated network")
-    print("  merge(mg)  = merge labeled_conn_*.csv")
-    print("  train(t)   = train ML on merged_dataset.csv")
-    print("  both(bt)   = merge then train")
+    print("  merge(mg)  = create train or test dataset")
+    print("  train(t)   = run ML using train_dataset.csv and test_dataset.csv")
+    print("  both(bt)   = create both datasets then run ML")
     print("  quit(q)    = exit")
 
     while True:
         mode = ask_choice(
-            "\nWhat do you want to process? base(b) / replay(r) / merge(mg) / train(t) / both(bt) / quit(q)",
+            "\nChoose action: base(b) / replay(r) / merge(mg) / train(t) / both(bt) / quit(q)",
             {"base", "replay", "merge", "train", "both", "quit"},
             {
                 "b": "base",
@@ -261,15 +352,6 @@ def main():
         )
 
         if again == "no":
-            finish = ask_choice(
-                "Merge labeled Zeek files and train ML now? yes(y) / no(n)",
-                {"yes", "no"},
-                {"y": "yes", "n": "no"},
-            )
-
-            if finish == "yes":
-                merge_and_train()
-
             break
 
 

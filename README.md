@@ -45,9 +45,9 @@ The framework is designed for controlled research experiments. It does not requi
 | `ground_truth_base.py` | Adds ground-truth rows for original PCAPs without replaying them. |
 | `label_zeek.py` | Labels Zeek `conn.log` JSON records using `ground_truth.csv`. |
 | `map_packets_to_flows.py` | Maps packets from a PCAP to labeled Zeek flows. |
-| `merge_datasets.py` | Merges all `labeled_conn_*.csv` files into `merged_dataset.csv`. |
-| `train_xgboost.py` | Trains a simple binary XGBoost baseline on `merged_dataset.csv`. |
-| `run_pipeline.py` | Interactive end-to-end pipeline for base labelling, replay, optional delay setup, Zeek labelling, dataset merging, and ML training. |
+| `merge_datasets.py` | Merges all `labeled_conn_*.csv` files into either `train_dataset.csv` or `test_dataset.csv`. |
+| `train_xgboost.py` | Trains a simple binary XGBoost baseline on train_dataset.csv` and `test_dataset.csv`. |
+| `run_pipeline.py` | Interactive end-to-end pipeline for base labelling, replay, optional random delay configurations, Zeek labelling, dataset merging, and ML training. |
 | `set_delay.sh` | Adds, removes, or lists gateway delay rules between two simulated IPs. |
 | `ground_truth.csv` | Current ground-truth metadata file. |
 | `README.md` | Project usage documentation. |
@@ -392,7 +392,8 @@ python3 merge_datasets.py
 Output:
 
 ```text
-merged_dataset.csv
+train_dataset.csv
+test_dataset.csv
 ```
 
 The script also adds a `source_file` column for debugging.
@@ -408,7 +409,8 @@ python3 train_xgboost.py
 The script expects:
 
 ```text
-merged_dataset.csv
+train_dataset.csv
+test_dataset.csv
 ```
 
 It trains a binary XGBoost classifier where:

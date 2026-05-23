@@ -198,26 +198,27 @@ def build_internal_host_ips(host_index):
     return simulated_ip, gateway_ip
 
 
-def build_external_host_ips(external_index):
+def build_external_host_ips(zone_index, host_index_in_zone):
     """
     External:
-      external 1   -> 172.31.11.11
-      external 2   -> 172.31.12.12
-      ...
-      external 243 -> 172.31.253.253
-      external 244 -> 172.32.11.11
+      Z0002 host 1 -> 172.31.11.11
+      Z0002 host 2 -> 172.31.12.12
+
+      Z0003 host 1 -> 172.32.11.11
+      Z0003 host 2 -> 172.32.12.12
     """
 
-    hosts_per_octet2 = HOST_OCTET3_END - HOST_OCTET3_START + 1
-
-    block = (external_index - 1) // hosts_per_octet2
-    offset = (external_index - 1) % hosts_per_octet2
-
-    o2 = EXTERNAL_START_OCTET2 + block
-    o3 = HOST_OCTET3_START + offset
+    o2 = EXTERNAL_START_OCTET2 + (zone_index - 2)
+    o3 = HOST_OCTET3_START + host_index_in_zone - 1
 
     if o2 > 254:
-        raise ValueError("Too many external hosts. Ran out of 172.x.x.x ranges.")
+        raise ValueError("Too many external zones. Ran out of 172.x.x.x ranges.")
+
+    if o3 > HOST_OCTET3_END:
+        raise ValueError(
+            f"Too many hosts in external zone Z{zone_index:04d}. "
+            f"Current range supports {HOST_OCTET3_END - HOST_OCTET3_START + 1} hosts per zone."
+        )
 
     simulated_ip = f"172.{o2}.{o3}.{o3}"
     gateway_ip = f"172.{o2}.{o3}.{GW_HOST_OCTET4}"
@@ -225,29 +226,47 @@ def build_external_host_ips(external_index):
     return simulated_ip, gateway_ip
 
 
+def external_group_key(ip):
+    parts = ip.split(".")
+    return ".".join(parts[:2])   # example: 172.31.11.11 -> 172.31
+
+
 def assign_external_hosts(external_hosts):
     assigned = []
     zone_labels = []
 
-    for external_index, host in enumerate(
-        sorted(external_hosts, key=lambda x: x["original_ip"]),
-        start=1,
-    ):
-        zone_index = external_index + 1
+    groups = defaultdict(list)
+
+    for host in external_hosts:
+        key = external_group_key(host["original_ip"])
+        groups[key].append(host)
+
+    external_host_index = 1
+    zone_index = 2
+
+    for group_key in sorted(groups.keys()):
         zone = zone_label(zone_index)
-
-        simulated_ip, gateway_ip = build_external_host_ips(external_index)
-
-        assigned.append({
-            **host,
-            "zone": zone,
-            "zone_index": zone_index,
-            "service_name": f"{zone}_external_host",
-            "simulated_ip": simulated_ip,
-            "gateway_ip": gateway_ip,
-        })
-
         zone_labels.append(zone)
+
+        for host_pos, host in enumerate(
+            sorted(groups[group_key], key=lambda x: x["original_ip"]),
+            start=1,
+        ):
+            simulated_ip, gateway_ip = build_external_host_ips(zone_index, host_pos)
+
+            assigned.append({
+                **host,
+                "zone": zone,
+                "zone_index": zone_index,
+                "service_name": f"{zone}_external_host_{host_pos:02d}",
+                "simulated_ip": simulated_ip,
+                "gateway_ip": gateway_ip,
+                "external_group": group_key,
+            })
+
+          
+
+        zone_index += 1
 
     return assigned, zone_labels
 
@@ -350,7 +369,17 @@ def build_simulated_topology(host_rows, edge_rows, dns_names, dhcp_zero_owner):
     } for edge in edge_rows]
 
     zone_labels = [INTERNAL_ZONE] + external_zone_labels
-    hosts_per_zone = [internal_count] + [1 for _ in external_zone_labels]
+
+    external_hosts_per_zone = []
+
+    for zone in external_zone_labels:
+        count = sum(
+            1 for m in external_assigned
+            if m["zone"] == zone
+        )
+        external_hosts_per_zone.append(count)
+
+    hosts_per_zone = [internal_count] + external_hosts_per_zone
 
     simulated_topology = {
         "pcap_file": PCAP,

@@ -36,9 +36,14 @@ PY
 }
 
 ip_exists() {
-  docker inspect $(docker ps --format '{{.Names}}' | grep -E "^${PREFIX}") \
-    --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' \
-    | tr ' ' '\n' | grep -Fxq "$1"
+  ips="$(
+    docker ps --format '{{.Names}}' | grep -E "^${PREFIX}" | while read -r c; do
+      docker inspect "$c" \
+        --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{"\n"}}{{end}}'
+    done
+  )"
+
+  echo "$ips" | grep -Fx "$1" >/dev/null
 }
 
 validate_pair() {

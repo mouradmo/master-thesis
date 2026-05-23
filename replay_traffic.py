@@ -885,8 +885,24 @@ def main():
             # Rewrite original PCAP into simulated topology.
             replay_pcap, expected, meta = build_rewritten(original, topo, workdir, args.keep_unmapped)
 
-            for iface in sorted({m["gw_iface"] for m in meta}):
-                print(f"[*] GW egress capture    : {GW}:{iface} (-Q out)")
+            iface_nums = sorted(
+                int(iface.replace("eth", ""))
+                for iface in {m["gw_iface"] for m in meta}
+            )
+
+            if iface_nums:
+                first_iface = iface_nums[0]
+                last_iface = iface_nums[-1]
+
+                if first_iface == last_iface:
+                    iface_text = f"eth{first_iface}"
+                else:
+                    iface_text = f"eth{first_iface}-eth{last_iface}"
+
+                print(
+                    f"[*] GW egress capture    : "
+                    f"{GW}:{iface_text} (-Q out)"
+                )
 
             # Start gateway captures before replay.
             any_pid = start_capture("any", ANY_TMP, ANY_LOG)

@@ -31,19 +31,64 @@ def ask_choice(msg, choices, aliases=None):
         if x in choices:
             return x
 
-        print("Choose:", ", ".join(sorted(choices | set(aliases.keys()))))
+        print("Invalid input.")
+        print("Choose one of:", ", ".join(sorted(choices | set(aliases.keys()))))
+
+
+def list_pcaps():
+    return sorted(Path(".").glob("*.pcap")) + sorted(Path(".").glob("*.pcapng"))
+
+
+def ask_pcap_path(msg):
+    while True:
+        value = ask(msg)
+        pcap = Path(value).expanduser()
+
+        if pcap.exists() and pcap.is_file():
+            return pcap.resolve()
+
+        print(f"\nFile not found: {value}")
+
+        pcaps = list_pcaps()
+        if pcaps:
+            print("\nAvailable PCAP files in current directory:")
+            for p in pcaps:
+                print(f"  - {p.name}")
+        else:
+            print("\nNo .pcap or .pcapng files found in current directory.")
+
+def ask_int_range(msg, min_value, max_value, default=None):
+    while True:
+        raw = ask(msg, str(default) if default is not None else "")
+
+        try:
+            value = int(raw)
+        except ValueError:
+            print("Invalid number.")
+            print(f"Allowed range: {min_value}-{max_value}")
+            continue
+
+        if value < min_value or value > max_value:
+            print("Invalid value.")
+            print(f"Allowed range: {min_value}-{max_value}")
+            continue
+
+        return value
+
+
+def ask_delay_range():
+    while True:
+        min_delay = ask_int_range("Minimum delay in ms", 0, 1_000_000, 50)
+        max_delay = ask_int_range("Maximum delay in ms", min_delay, 1_000_000, 1000)
+
+        if max_delay < min_delay:
+            print("Maximum delay must be larger than or equal to minimum delay.")
+            continue
+
+        return min_delay, max_delay
 
 
 def cleanup_experiment_files():
-    """
-    Keep only important experiment outputs:
-      - labeled_conn_*.csv
-      - gateway_egress_*.pcap
-      - ground_truth.csv
-
-    Delete temporary/debug files.
-    """
-
     files_to_delete = [
         "docker-compose.yml",
         "topology.json",
@@ -92,7 +137,7 @@ def zeek_and_label(pcap, out_csv):
 
 
 def process_base():
-    pcap = Path(ask("Original/base PCAP path")).expanduser().resolve()
+    pcap = ask_pcap_path("Original/base PCAP path")
 
     label = ask_choice(
         "Label? benign(b) / malicious(m)",
@@ -111,6 +156,10 @@ def process_base():
         ])
 
         zeek_and_label(pcap, out_csv)
+
+        zeek_dir = Path(f"zeek_{pcap.stem}")
+        if zeek_dir.exists():
+            shutil.rmtree(zeek_dir)
 
         print(f"[+] Done base -> {out_csv}")
 
@@ -190,22 +239,17 @@ def maybe_apply_delay():
 
     max_pairs = len(hosts) * (len(hosts) - 1)
 
-    try:
-        count = int(ask("How many random delay rules?", "1"))
-    except ValueError:
-        raise SystemExit("Delay count must be a number")
+    print(f"\nMaximum possible directional delay rules: {max_pairs}")
+    print("A directional rule means SRC -> DST. Reverse direction is a separate rule.")
 
-    if count < 1:
-        return
+    count = ask_int_range(
+        "How many random delay rules?",
+        1,
+        max_pairs,
+        1,
+    )
 
-    if count > max_pairs:
-        raise SystemExit(f"Too many delays. Maximum possible is {max_pairs}")
-
-    min_delay = int(ask("Minimum delay in ms", "50"))
-    max_delay = int(ask("Maximum delay in ms", "1000"))
-
-    if min_delay < 0 or max_delay < min_delay:
-        raise SystemExit("Invalid delay range")
+    min_delay, max_delay = ask_delay_range()
 
     possible_pairs = []
 
@@ -227,13 +271,35 @@ def maybe_apply_delay():
 
         print(f"  {src} -> {dst} = {delay_ms}ms")
 
-        run([
-            "./set_delay.sh",
-            "set",
-            src,
-            dst,
-            str(delay_ms),
-        ])
+        while True:
+            try:
+                run([
+                    "./set_delay.sh",
+                    "set",
+                    src,
+                    dst,
+                    str(delay_ms),
+                ])
+                break
+            except subprocess.CalledProcessError as e:
+                print(f"[!] Failed to apply delay rule: {src} -> {dst} = {delay_ms}ms")
+                print(f"[!] set_delay.sh exited with code {e.returncode}")
+
+                retry = ask_choice(
+                    "Retry this delay rule? yes(y) / skip(s) / stop(n)",
+                    {"yes", "skip", "stop"},
+                    {"y": "yes", "s": "skip", "n": "stop"},
+                )
+
+                if retry == "skip":
+                    break
+                if retry == "stop":
+                    return
+
+    try:
+        run(["./set_delay.sh", "list"])
+    except subprocess.CalledProcessError:
+        print("[!] Could not list delay rules, continuing.")
 
 
 def stop_docker_topology():
@@ -245,7 +311,7 @@ def stop_docker_topology():
 
 
 def process_replay():
-    pcap = Path(ask("Original PCAP to replay")).expanduser().resolve()
+    pcap = ask_pcap_path("Original PCAP to replay")
 
     label = ask_choice(
         "Label? benign(b) / malicious(m)",
@@ -290,11 +356,17 @@ def process_replay():
 
 
 def merge_only():
-    run(["python3", "merge_datasets.py"])
+    try:
+        run(["python3", "merge_datasets.py"])
+    except subprocess.CalledProcessError as e:
+        print(f"[!] merge_datasets.py failed with exit code {e.returncode}")
 
 
 def train_only():
-    run(["python3", "train_xgboost.py"])
+    try:
+        run(["python3", "train_xgboost.py"])
+    except subprocess.CalledProcessError as e:
+        print(f"[!] train_xgboost.py failed with exit code {e.returncode}")
 
 
 def merge_and_train():

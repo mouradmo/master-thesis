@@ -31,7 +31,6 @@ model = XGBClassifier(
     learning_rate=0.1,
     eval_metric="logloss",
     random_state=42,
-    use_label_encoder=False,
 )
 
 model.fit(X_train, y_train)

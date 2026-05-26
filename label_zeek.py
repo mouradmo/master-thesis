@@ -3,7 +3,7 @@
 import csv
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 def parse_utc(ts: str) -> datetime:
@@ -49,7 +49,8 @@ def label_record(rec: dict, gt_rows: list):
 
     for gt in gt_rows:
         # overlap between Zeek flow time and replay execution time
-        overlaps = flow_start <= gt["end_dt"] and flow_end >= gt["start_dt"]
+        slack = timedelta(seconds=1)
+        overlaps = flow_start <= gt["end_dt"] + slack and flow_end >= gt["start_dt"] - slack
 
         if not overlaps:
             continue

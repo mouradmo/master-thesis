@@ -2,8 +2,7 @@
 import argparse
 import csv
 from pathlib import Path
-
-from scapy.all import IP, TCP, UDP, rdpcap
+from scapy.all import IP, TCP, UDP, rdpcap, ICMP
 
 
 def pkt_proto(p):
@@ -11,6 +10,8 @@ def pkt_proto(p):
         return "tcp"
     if UDP in p:
         return "udp"
+    if ICMP in p:
+        return "icmp"
     return str(p[IP].proto)
 
 
@@ -19,6 +20,8 @@ def pkt_ports(p):
         return str(p[TCP].sport), str(p[TCP].dport)
     if UDP in p:
         return str(p[UDP].sport), str(p[UDP].dport)
+    if ICMP in p:
+        return str(int(p[ICMP].type)), str(int(p[ICMP].code))
     return "", ""
 
 

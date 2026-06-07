@@ -48,6 +48,38 @@ data/processed/
 data/interim/
 
 ############################
+# Generated datasets / labels
+############################
+*.csv
+ground_truth.csv
+labeled_conn*.csv
+packet_flow_map*.csv
+merged*.csv
+train_dataset*.csv
+test_dataset*.csv
+
+############################
+# Zeek logs / capture logs
+############################
+*.log
+conn.log
+dns.log
+http.log
+ssl.log
+x509.log
+weird.log
+notice.log
+zeek_*/
+logs/
+
+############################
+# Docker / generated topology files
+############################
+docker-compose.yml
+topology.json
+simulated_topology.json
+
+############################
 # Malware / attack artifacts
 ############################
 malware/
@@ -68,7 +100,6 @@ checkpoints/
 # Results / outputs
 ############################
 results/
-logs/
 outputs/
 
 ############################
@@ -88,4 +119,3 @@ outputs/
 .cache/
 tmp/
 temp/
-venv/

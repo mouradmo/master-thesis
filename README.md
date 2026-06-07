@@ -221,7 +221,7 @@ python3 replay_traffic.py \
   --pcap <input.pcap> \
   --topology simulated_topology.json \
   --multiplier 1.0 \
-  --attack-class "malware traffic"
+  --label malicious or benign
 ```
 
 Example benign replay:
@@ -230,7 +230,8 @@ Example benign replay:
 python3 replay_traffic.py \
   --pcap benign_sample.pcap \
   --topology simulated_topology.json \
-  --multiplier 1.0
+  --multiplier 1.0 \
+  --label benign
 ```
 
 Example malicious replay:
@@ -240,7 +241,7 @@ python3 replay_traffic.py \
   --pcap malware_sample.pcap \
   --topology simulated_topology.json \
   --multiplier 1.0 \
-  --attack-class "malware traffic"
+  --label malicious
 ```
 
 Important arguments:
@@ -251,7 +252,7 @@ Important arguments:
 | `--topology` | Topology mapping file. Default: `simulated_topology.json`. |
 | `--multiplier` | Timing multiplier for replay speed. Default: `1.0`. |
 | `--ground-truth` | Ground-truth CSV path. Default: `ground_truth.csv`. |
-| `--attack-class` | If provided, the replay is labeled malicious. If empty, it is labeled benign. |
+| `--label` | The replay is labeled to malicious or benign based on what user type. |
 | `--notes` | Extra notes written to ground truth. |
 | `--capture-out` | Raw gateway any-interface capture. Default: `gateway_capture_any.pcap`. |
 | `--clean-out` | Cleaned gateway egress capture. Default: `gateway_egress.pcap`. |
@@ -272,7 +273,7 @@ Outputs commonly include:
 Current ground-truth columns:
 
 ```csv
-execution_id,sample_id,attack_class,traffic_label,replay_start_time_utc,replay_end_time_utc,replay_multiplier,status,notes
+execution_id,sample_id,traffic_label,replay_start_time_utc,replay_end_time_utc,replay_multiplier,status,notes
 ```
 
 Meaning:
@@ -305,7 +306,6 @@ For malicious original PCAPs:
 python3 ground_truth_base.py \
   --pcaps malware_sample.pcap \
   --label malicious \
-  --attack-class "malware traffic" \
   --ground-truth ground_truth.csv
 ```
 
@@ -373,7 +373,7 @@ python3 map_packets_to_flows.py \
   --all-candidates
 ```
 
-This creates a packet-level mapping to Zeek flow rows, labels, attack classes, and sample IDs.
+This creates a packet-level mapping to Zeek flow rows, labels, and sample IDs.
 
 ## 10. Merge Datasets
 
@@ -454,7 +454,7 @@ python3 replay_traffic.py \
   --pcap sample.pcap \
   --topology simulated_topology.json \
   --multiplier 1.0 \
-  --attack-class "malware traffic" \
+  --label benign or malicious \
   --clean-out gateway_egress.pcap
 
 # 5. Convert to Zeek flows
@@ -539,7 +539,6 @@ Check the simulated IPs in `simulated_topology.json` and make sure the Docker to
 Check:
 
 - `ground_truth.csv` uses `status=completed`
-- `attack_class` is set for malicious traffic
 - Zeek flow timestamps overlap `replay_start_time_utc` and `replay_end_time_utc`
 - the correct `conn.log` and PCAP are being used
 
